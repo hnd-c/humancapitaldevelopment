@@ -7,12 +7,18 @@ import numpy as np
 import pandas as pd
 from enriched_vector import RichVectorEncoder, load_student_history_normalized, create_question_mapping_from_normalized
 from transition_matrix import _build_cooccurrence_transitions, recommend_next_clusters
+from database_manager import DatabaseManager
+import json
+from psycopg2.extras import RealDictCursor
 
 
-class QuestionRecommendationEngine:
-    def __init__(self):
+class OptimizedRecommendationEngine:
+    def __init__(self, db_manager):
         """Initialize the complete recommendation system"""
         print("🚀 Initializing Recommendation Engine...")
+
+        self.db = db_manager
+        self.transition_matrix = self._load_or_build_transition_matrix()
 
         # Load question data and clusters from combined_questions.parquet
         try:
@@ -33,7 +39,6 @@ class QuestionRecommendationEngine:
 
         # Initialize components
         self.encoder = RichVectorEncoder(self.soft_clusters, self.question_mapping)
-        self.transition_matrix = _build_cooccurrence_transitions(alpha=0.1, normalize=True)
 
         if self.transition_matrix is not None:
             print("✅ Initialized encoder and transition matrix")
@@ -60,137 +65,115 @@ class QuestionRecommendationEngine:
         print(f"📋 Created mapping for {len(question_mapping)} questions")
         return question_mapping
 
-    def recommend_questions(self, student_id, objective='balanced', top_k=5):
-        """
-        Complete recommendation pipeline
-
-        Args:
-            student_id: Student identifier (can be string like "SXC_AL_Y1_B_PHY_P1_STU_001" or int)
-            objective: Learning objective ('coverage', 'efficiency', 'success_rate', 'balanced')
-            top_k: Number of questions to recommend
-
-        Returns:
-            List of recommended question IDs with scores
-        """
-        print(f"\n🎯 Generating recommendations for {student_id} with {objective} objective...")
-
-        # 1. Load student history from normalized tables
+    def _load_or_build_transition_matrix(self):
+        """Load transition matrix using hybrid storage strategy"""
         try:
-            if isinstance(student_id, str):
-                # Extract base student number from full student ID
-                if "_STU_" in student_id:
-                    base_number = int(student_id.split("_STU_")[-1])
-                else:
-                    base_number = int(student_id)
+            # Import the storage manager
+            from transition_matrix_storage import TransitionMatrixManager
+
+            # Get Redis client for vectors (port 6380)
+            import redis
+            redis_client = redis.Redis(
+                host=self.db.redis_config.get('host', 'localhost'),
+                port=6380,  # Use vector Redis instance
+                db=0
+            )
+
+            # Initialize storage manager
+            storage_manager = TransitionMatrixManager(redis_client, self.db.db_config)
+
+            # Get matrix using hybrid strategy
+            matrix = storage_manager.get_or_compute_matrix(force_rebuild=False)
+
+            if matrix is not None:
+                print(f"✅ Loaded transition matrix from storage ({matrix.shape})")
+                return matrix
             else:
-                base_number = student_id
+                print("❌ Failed to load transition matrix from any source")
+                return None
 
-            student_attempts = load_student_history_normalized(base_number)
         except Exception as e:
-            print(f"⚠️  Error loading student history: {e}")
-            student_attempts = []
+            print(f"❌ Error in transition matrix loading: {e}")
+            print("🔄 Falling back to direct computation...")
 
-        if not student_attempts:
-            print("⚠️  No student history found, using default recommendations")
-            return self._default_recommendations(top_k)
+            # Fallback to direct computation
+            try:
+                from transition_matrix import _build_cooccurrence_transitions
+                matrix = _build_cooccurrence_transitions(alpha=0.1, normalize=True)
+                print(f"✅ Built transition matrix directly ({matrix.shape if matrix is not None else 'failed'})")
+                return matrix
+            except Exception as fallback_error:
+                print(f"❌ Fallback computation also failed: {fallback_error}")
+                return None
 
-        # 2. Find current question (last attempted)
-        current_question = student_attempts[-1]['question_id']
-        print(f"📍 Current question: {current_question}")
+    def recommend_questions_optimized(self, student_id, objective='balanced', top_k=5):
+        """Database-optimized recommendations with caching"""
+        cache_key = f"recommendations:{student_id}:{objective}:{top_k}"
 
-        # 3. Create enriched state vector
-        current_state = self.encoder.encode_student_context(
-            current_question=current_question,
-            student_attempts=student_attempts,
-            objective=objective
-        )
-        print(f"🧠 Current state vector (top 3 clusters): {np.argsort(current_state)[-3:]}")
+        # Check Redis cache first
+        cached = self.db.redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
 
-        # 4. Apply transition matrix to get next cluster priorities
-        next_cluster_priorities = recommend_next_clusters(current_state, self.transition_matrix)
-        print(f"➡️  Next priorities (top 3 clusters): {np.argsort(next_cluster_priorities)[-3:]}")
+        # Get student history (cached)
+        student_history = self.db.get_student_history_optimized(student_id)
 
-        # 5. Select questions based on cluster priorities
-        recommendations = self._select_questions_by_clusters(
-            next_cluster_priorities,
-            student_attempts,
-            top_k
-        )
+        if not student_history:
+            return self._get_default_recommendations_db(top_k)
+
+        # Get current state using database operations
+        current_state = self._encode_student_context_db(student_id, student_history, objective)
+
+        # Use PostgreSQL for similarity search
+        recommendations = self._find_recommendations_db(current_state, student_history, top_k)
+
+        # Cache recommendations for 10 minutes
+        self.db.redis_client.setex(cache_key, 600, json.dumps(recommendations, default=str))
 
         return recommendations
 
-    def _select_questions_by_clusters(self, cluster_priorities, student_attempts, top_k):
-        """Select specific questions based on cluster priorities with better diversity"""
+    def _find_recommendations_db(self, current_state, student_history, top_k):
+        """Use PostgreSQL vector operations for recommendations"""
+        attempted_questions = {h['internal_question_id'] for h in student_history}
 
-        # Get attempted question IDs
-        attempted_questions = {attempt['question_id'] for attempt in student_attempts}
+        with self.db.get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Score all unattempted questions by cluster
-        questions_by_cluster = {}
+            # Use PostgreSQL's vector operations
+            query = """
+            WITH cluster_priorities AS (
+                SELECT unnest(%s) as priority,
+                       generate_series(0, %s) as cluster_id
+            ),
+            question_scores AS (
+                SELECT q.internal_question_id, q.question_id, q.paper_id,
+                       -- Calculate score using PostgreSQL vector operations
+                       (q.soft_cluster <#> %s::vector) as cluster_alignment_score,
+                       -- Get dominant cluster
+                       (SELECT i-1 FROM unnest(q.soft_cluster) WITH ORDINALITY arr(val,i)
+                        ORDER BY val DESC LIMIT 1) as dominant_cluster
+                FROM questions q
+                WHERE q.internal_question_id NOT IN %s
+                  AND q.soft_cluster IS NOT NULL
+            )
+            SELECT qs.*, cp.priority as cluster_priority
+            FROM question_scores qs
+            JOIN cluster_priorities cp ON qs.dominant_cluster = cp.cluster_id
+            ORDER BY qs.cluster_alignment_score ASC, cp.priority DESC
+            LIMIT %s
+            """
 
-        for q_idx in range(len(self.questions_df)):
-            question_row = self.questions_df.iloc[q_idx]
-            question_id = f"{question_row['paper_number']}_{question_row['question_number']}"
+            cursor.execute(query, (
+                current_state.tolist(),
+                len(current_state) - 1,
+                current_state.tolist(),
+                tuple(attempted_questions) if attempted_questions else (0,),
+                top_k
+            ))
 
-            if question_id not in attempted_questions:
-                question_clusters = self.soft_clusters[q_idx]
-                primary_cluster = np.argmax(question_clusters)
+            return cursor.fetchall()
 
-                # Score = weighted sum of cluster priorities
-                score = np.sum(question_clusters * cluster_priorities)
-
-                if primary_cluster not in questions_by_cluster:
-                    questions_by_cluster[primary_cluster] = []
-
-                questions_by_cluster[primary_cluster].append({
-                    'question_id': question_id,
-                    'question_index': q_idx,
-                    'score': score,
-                    'primary_cluster': primary_cluster,
-                    'cluster_strength': np.max(question_clusters),
-                    'paper_number': question_row['paper_number'],
-                    'question_number': question_row['question_number']
-                })
-
-        # Get diverse recommendations across top clusters
-        recommendations = []
-        top_clusters = np.argsort(cluster_priorities)[-10:][::-1]  # Top 10 clusters
-
-        # Try to get questions from different clusters for diversity
-        for cluster_id in top_clusters:
-            if cluster_id in questions_by_cluster and len(recommendations) < top_k:
-                # Sort questions in this cluster by score
-                cluster_questions = sorted(questions_by_cluster[cluster_id],
-                                         key=lambda x: x['score'], reverse=True)
-
-                # Add best question from this cluster
-                if cluster_questions:
-                    recommendations.append(cluster_questions[0])
-
-        # If still need more questions, fill with highest scoring overall
-        if len(recommendations) < top_k:
-            all_questions = []
-            for cluster_questions in questions_by_cluster.values():
-                all_questions.extend(cluster_questions)
-
-            all_questions.sort(key=lambda x: x['score'], reverse=True)
-
-            # Add questions not already included
-            included_ids = {r['question_id'] for r in recommendations}
-            for question in all_questions:
-                if question['question_id'] not in included_ids and len(recommendations) < top_k:
-                    recommendations.append(question)
-
-        print(f"\n📋 Top {min(top_k, len(recommendations))} Recommendations:")
-        for i, rec in enumerate(recommendations[:top_k], 1):
-            print(f"   {i}. Question {rec['question_id']}: "
-                  f"Score={rec['score']:.3f}, "
-                  f"Cluster={rec['primary_cluster']}, "
-                  f"Paper={rec['paper_number']}")
-
-        return recommendations[:top_k]
-
-    def _default_recommendations(self, top_k):
+    def _get_default_recommendations_db(self, top_k):
         """Fallback recommendations when no student history"""
         print("📋 Using default recommendations...")
 
@@ -357,7 +340,7 @@ def main():
 
     try:
         # Initialize the engine
-        engine = QuestionRecommendationEngine()
+        engine = OptimizedRecommendationEngine()
 
         # Test with student (use base student number or full ID)
         test_students = [1, "SXC_AL_Y1_B_PHY_P1_STU_001"]

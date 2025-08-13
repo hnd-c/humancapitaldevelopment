@@ -1,0 +1,304 @@
+version: '3.8'
+
+services:
+  # Enhanced PostgreSQL with pgvector optimizations
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: hcd_postgres_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: human_capital_production
+      POSTGRES_USER: hcd_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your_secure_production_password}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgresql_migration.sql:/docker-entrypoint-initdb.d/01-migration.sql
+      - ./init-scripts:/docker-entrypoint-initdb.d
+      - ./postgres-config:/etc/postgresql
+    # Production-optimized PostgreSQL configuration
+    command: >
+      postgres
+      -c shared_preload_libraries=vector
+      -c max_connections=500
+      -c shared_buffers=512MB
+      -c effective_cache_size=2GB
+      -c maintenance_work_mem=128MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=32MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=8MB
+      -c huge_pages=try
+      -c max_worker_processes=16
+      -c max_parallel_workers_per_gather=4
+      -c max_parallel_workers=16
+      -c max_parallel_maintenance_workers=4
+    networks:
+      - hcd-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hcd_user -d human_capital_production"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Redis for caching with persistence
+  redis-cache:
+    image: redis:7-alpine
+    container_name: hcd_redis_cache
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 1GB
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --tcp-keepalive 60
+      --timeout 300
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_cache_data:/data
+      - ./redis-cache.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - hcd-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  # Dedicated Redis for vector similarities
+  redis-vectors:
+    image: redis:7-alpine
+    container_name: hcd_redis_vectors
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 2GB
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_vector_data:/data
+    networks:
+      - hcd-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Main HCD Application
+  hcd-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: hcd_api_prod
+    restart: unless-stopped
+    environment:
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: human_capital_production
+      DB_USER: hcd_user
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-your_secure_production_password}
+
+      # Redis
+      REDIS_HOST: redis-cache
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+
+      # Vector Redis
+      REDIS_VECTOR_HOST: redis-vectors
+      REDIS_VECTOR_PORT: 6379
+      REDIS_VECTOR_DB: 0
+
+      # Application
+      APP_ENV: production
+      DEBUG: false
+      LOG_LEVEL: INFO
+      MAX_WORKERS: 8
+
+      # Security
+      SECRET_KEY: ${SECRET_KEY:-your_secret_key_here}
+
+      # Performance
+      ENABLE_CACHING: true
+      CACHE_TTL: 600
+      MAX_CONCURRENT_USERS: 1000
+
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data:ro  # Mount data directory as read-only
+      - hcd_logs:/app/logs
+    networks:
+      - hcd-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-vectors:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Background Workers for ML Processing
+  hcd-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: hcd_worker_prod
+    restart: unless-stopped
+    environment:
+      # Same environment as API
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: human_capital_production
+      DB_USER: hcd_user
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-your_secure_production_password}
+      REDIS_HOST: redis-cache
+      REDIS_PORT: 6379
+      APP_ENV: production
+      WORKER_MODE: true
+    command: ["python", "worker.py"]
+    volumes:
+      - ./data:/app/data:ro
+      - hcd_logs:/app/logs
+    networks:
+      - hcd-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+    deploy:
+      replicas: 2  # Run 2 worker instances
+
+  # Nginx Load Balancer & Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: hcd_nginx_prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - hcd_logs:/var/log/nginx
+    networks:
+      - hcd-network
+    depends_on:
+      - hcd-api
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus for Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: hcd_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - hcd-network
+    profiles:
+      - monitoring
+
+  # Grafana for Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: hcd_grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin_secure_password}
+      GF_USERS_ALLOW_SIGN_UP: false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - hcd-network
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+  # Optional: pgAdmin for Database Management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: hcd_pgadmin_prod
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@humancapital.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin_secure_password}
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: 'True'
+      PGADMIN_CONFIG_LOGIN_BANNER: "Human Capital Development DB Admin - PRODUCTION"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+    networks:
+      - hcd-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - management
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_cache_data:
+    driver: local
+  redis_vector_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  hcd_logs:
+    driver: local
+
+networks:
+  hcd-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

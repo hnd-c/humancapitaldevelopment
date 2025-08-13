@@ -61,3 +61,44 @@ typing_extensions==4.14.1
 tzdata==2025.2
 uritemplate==4.2.0
 urllib3==2.5.0
+
+# ===================================================================
+# Human Capital Development System - Database & ML Extensions
+# ===================================================================
+
+# Core ML & Scientific Computing (enhanced versions)
+scikit-learn>=1.3.0
+scipy>=1.10.0
+
+# Vector Operations & Embeddings
+openai>=1.0.0
+sentence-transformers>=2.2.0
+umap-learn>=0.5.3
+
+# Database Connectivity (Essential for new system)
+psycopg2-binary>=2.9.5
+redis>=4.5.0
+
+# Web Framework (for API endpoints)
+fastapi>=0.100.0
+uvicorn>=0.20.0
+
+# Additional Data Processing
+h5py>=3.8.0
+
+# Monitoring & Performance
+prometheus-client>=0.16.0
+
+# Development Tools
+black>=23.0.0
+click>=8.0.0
+joblib>=1.2.0
+
+# Configuration Management
+pyyaml>=6.0
+
+# Async & Concurrency
+aioredis>=2.0.0
+
+# Security
+cryptography>=41.0.0

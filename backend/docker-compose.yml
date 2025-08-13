@@ -1,0 +1,286 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: hcd_postgres_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: human_capital_dev
+      POSTGRES_USER: hcd_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your_secure_password_here}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgresql_migration.sql:/docker-entrypoint-initdb.d/01-migration.sql
+      - ./init-scripts:/docker-entrypoint-initdb.d
+      - ./postgres-config:/etc/postgresql
+    # Development-optimized PostgreSQL configuration
+    command: >
+      postgres
+      -c shared_preload_libraries=vector
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=4MB
+      -c max_worker_processes=8
+      -c max_parallel_workers_per_gather=2
+      -c max_parallel_workers=8
+      -c max_parallel_maintenance_workers=2
+    networks:
+      - hcd-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hcd_user -d human_capital_dev"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Redis for caching with persistence (development)
+  redis-cache:
+    image: redis:7-alpine
+    container_name: hcd_redis_cache
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512MB
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --tcp-keepalive 60
+      --timeout 300
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_cache_data:/data
+      - ./redis-cache.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - hcd-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  # Dedicated Redis for vector similarities (development)
+  redis-vectors:
+    image: redis:7-alpine
+    container_name: hcd_redis_vectors
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 1GB
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_vector_data:/data
+    networks:
+      - hcd-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Main HCD Application (Development)
+  hcd-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hcd_api_dev
+    restart: unless-stopped
+    environment:
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: human_capital_dev
+      DB_USER: hcd_user
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-your_secure_password_here}
+
+      # Redis
+      REDIS_HOST: redis-cache
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+
+      # Vector Redis
+      REDIS_VECTOR_HOST: redis-vectors
+      REDIS_VECTOR_PORT: 6379
+      REDIS_VECTOR_DB: 0
+
+      # Application
+      APP_ENV: development
+      DEBUG: true
+      LOG_LEVEL: DEBUG
+      MAX_WORKERS: 4
+
+      # Performance
+      ENABLE_CACHING: true
+      CACHE_TTL: 300
+      MAX_CONCURRENT_USERS: 100
+
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app  # Mount source code for development
+      - ./data:/app/data:ro
+      - hcd_logs:/app/logs
+    networks:
+      - hcd-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-vectors:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    profiles:
+      - api
+
+  # Optional: Redis Commander for GUI management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: redis_commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=cache:redis-cache:6379,vectors:redis-vectors:6380
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=admin
+    ports:
+      - "8081:8081"
+    networks:
+      - hcd-network
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+    profiles:
+      - tools  # Only start when using --profile tools
+
+  # Optional: pgAdmin for PostgreSQL GUI management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin_hcd
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@humancapital.dev
+      PGADMIN_DEFAULT_PASSWORD: admin_secure_password
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: 'True'
+      PGADMIN_CONFIG_LOGIN_BANNER: "Human Capital Development DB Admin"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json  # Pre-configure server connections
+    networks:
+      - hcd-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - tools  # Only start when using --profile tools
+
+  # Monitoring - Prometheus (development)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: hcd_prometheus_dev
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=48h'  # Shorter retention for dev
+      - '--web.enable-lifecycle'
+    networks:
+      - hcd-network
+    profiles:
+      - monitoring
+
+  # Monitoring - Grafana (development)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: hcd_grafana_dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin_dev_password}
+      GF_USERS_ALLOW_SIGN_UP: true  # Allow signup in dev
+      GF_INSTALL_PLUGINS: "grafana-clock-panel,grafana-simple-json-datasource"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - hcd-network
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+  # Optional: Jupyter notebook for data analysis and vector exploration
+  jupyter:
+    image: jupyter/scipy-notebook:latest
+    container_name: hcd_jupyter
+    restart: unless-stopped
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      JUPYTER_TOKEN: "your_jupyter_token_here"
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+      - ./data:/home/jovyan/work/data
+    networks:
+      - hcd-network
+    profiles:
+      - dev  # Only start in development mode
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_cache_data:
+    driver: local
+  redis_vector_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  hcd_logs:
+    driver: local
+
+networks:
+  hcd-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
