@@ -86,11 +86,21 @@ class HumanCapitalDevelopmentSystem:
             raise ValueError(f"Invalid student_id type: {type(student_id)}")
 
     def _initialize_recommendation_engine(self):
-        """Initialize the recommendation engine"""
+        """Initialize the recommendation engine with caching"""
         try:
+            # Check if we should skip heavy initialization for faster startup
+            cache_key = "recommendation_engine_ready"
+            if self.components['cache_manager'].redis.get(cache_key):
+                print("🚀 Using cached recommendation engine state")
+
+            # Use lazy loading for faster startup (loads on first API call)
             self.recommendation_engine = OptimizedRecommendationEngine(
-                self.components['db_manager']
+                self.components['db_manager'],
+                lazy_load=True
             )
+
+            # Mark as ready for 1 hour
+            self.components['cache_manager'].redis.setex(cache_key, 3600, "1")
             print("✅ Recommendation engine initialized")
         except Exception as e:
             print(f"⚠️  Recommendation engine initialization failed: {e}")

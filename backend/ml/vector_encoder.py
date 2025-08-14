@@ -5,10 +5,11 @@ import glob
 import os
 
 class RichVectorEncoder:
-    def __init__(self, soft_clusters, question_mapping=None):
+    def __init__(self, soft_clusters, question_mapping=None, db_manager=None):
         self.soft_clusters = soft_clusters
         self.question_mapping = question_mapping  # Maps question_id strings to integer indices
         self.n_clusters = soft_clusters.shape[1]  # Derive cluster count from data
+        self.db_manager = db_manager  # Database manager for direct database access
 
     def encode_student_context(self, current_question, student_attempts, objective,
                               population_stats=None):
@@ -266,8 +267,56 @@ def find_latest_normalized_files():
     return files
 
 
-def load_student_history_normalized(student_id=1):
-    """Load student history from normalized tables (recommended approach)"""
+def load_student_history_from_database(student_id, db_manager):
+    """Load student history directly from database"""
+    try:
+        print(f"📖 Loading student history for student_id={student_id} from database...")
+
+        # Use the existing optimized method from database manager
+        history_data = db_manager.get_student_history_optimized(student_id)
+
+        if not history_data:
+            print(f"⚠️ No history found for student_id={student_id}")
+            return []
+
+        # Convert to the format expected by vector encoder
+        student_attempts = []
+        for record in history_data:
+            student_attempts.append({
+                'id': record.get('history_id'),
+                'enrollment_id': record.get('enrollment_id'),
+                'question_id': record.get('question_id'),
+                'internal_question_id': record.get('internal_question_id'),
+                'status': 'correct' if record.get('is_correct') else 'incorrect',
+                'is_correct': record.get('is_correct', False),
+                'is_skipped': record.get('is_skipped', False),
+                'time_spent_sec': record.get('time_spent_sec', 0),
+                'timestamp': record.get('timestamp'),
+                'confidence_level': record.get('confidence_level', 5),
+                'device_type': record.get('device_type', 'unknown')
+            })
+
+        print(f"✅ Loaded {len(student_attempts)} attempts from database")
+        if student_attempts:
+            correct_count = sum(1 for a in student_attempts if a['is_correct'])
+            print(f"   - Correct: {correct_count}")
+            print(f"   - Incorrect: {len(student_attempts) - correct_count}")
+
+        return student_attempts
+
+    except Exception as e:
+        print(f"❌ Error loading student history from database: {e}")
+        return []
+
+
+def load_student_history_normalized(student_id=1, db_manager=None):
+    """Load student history from database or normalized tables"""
+
+    # If database manager is provided, use database
+    if db_manager is not None:
+        return load_student_history_from_database(student_id, db_manager)
+
+    # Fallback to parquet files (original behavior)
     try:
         print(f"📖 Loading student history for student_id={student_id} from normalized tables...")
 

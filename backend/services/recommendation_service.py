@@ -9,16 +9,33 @@ from ml.vector_encoder import RichVectorEncoder, load_student_history_normalized
 from ml.transition_matrix import _build_cooccurrence_transitions, recommend_next_clusters
 from data.database_manager import DatabaseManager
 import json
+import time
 from psycopg2.extras import RealDictCursor
 
 
 class OptimizedRecommendationEngine:
-    def __init__(self, db_manager):
+    def __init__(self, db_manager, lazy_load=False):
         """Initialize the complete recommendation system"""
         print("🚀 Initializing Recommendation Engine...")
 
         self.db = db_manager
+        self.lazy_load = lazy_load
+        self._initialized = False
 
+        # Initialize basic attributes regardless of lazy loading
+        self.questions_df = None
+        self.soft_clusters = None
+        self.question_mapping = None
+        self.transition_matrix = None
+        self.encoder = None
+
+        if not lazy_load:
+            self._full_initialization()
+        else:
+            print("⚡ Using lazy loading - components will initialize on first use")
+
+    def _full_initialization(self):
+        """Perform full initialization of all components"""
         # Load question data and clusters from PostgreSQL database first
         try:
             self.questions_df = self._load_questions_from_database()
@@ -39,14 +56,26 @@ class OptimizedRecommendationEngine:
         # Now load or build transition matrix (after questions_df is available)
         self.transition_matrix = self._load_or_build_transition_matrix()
 
-        # Initialize components
-        self.encoder = RichVectorEncoder(self.soft_clusters, self.question_mapping)
+        # Initialize components (optional)
+        try:
+            self.encoder = RichVectorEncoder(self.soft_clusters, self.question_mapping, self.db)
+            print("✅ Initialized RichVectorEncoder")
+        except Exception as e:
+            print(f"⚠️ Could not initialize RichVectorEncoder: {e}")
+            self.encoder = None
 
         if self.transition_matrix is not None:
-            print("✅ Initialized encoder and transition matrix")
+            print("✅ Initialized transition matrix")
         else:
-            print("❌ Failed to initialize transition matrix")
-            raise ValueError("Cannot proceed without transition matrix")
+            print("⚠️ No transition matrix - will use direct cluster-based recommendations")
+
+        self._initialized = True
+        print("✅ Recommendation engine ready")
+
+    def _ensure_initialized(self):
+        """Ensure components are initialized before use"""
+        if not self._initialized:
+            self._full_initialization()
 
     def _create_question_mapping(self):
         """Create mapping from question_id strings to integer indices"""
@@ -69,6 +98,26 @@ class OptimizedRecommendationEngine:
 
     def _load_questions_from_database(self):
         """Load question data with embeddings from PostgreSQL database"""
+        # Check cache first - using JSON serialization for better reliability
+        cache_key = "questions_data_v2"
+        try:
+            cached_data = self.db.redis_client.get(cache_key)
+            if cached_data:
+                import json
+                cached_json = json.loads(cached_data)
+                # Reconstruct DataFrame from cached JSON
+                df = pd.DataFrame(cached_json['data'])
+
+                # Convert vector columns back to numpy arrays
+                for col in ['soft_cluster', 'openai_embedding', 'umap_embedding']:
+                    if col in df.columns:
+                        df[col] = df[col].apply(lambda x: np.array(x, dtype=np.float32) if x is not None else None)
+
+                print(f"✅ Loaded {len(df)} questions from cache (JSON)")
+                return df
+        except Exception as e:
+            print(f"⚠️ Cache miss for questions data: {e}")
+
         try:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor(cursor_factory=self.db.RealDictCursor)
@@ -132,6 +181,30 @@ class OptimizedRecommendationEngine:
                 df['question_number'] = df['question_number'].astype(str)
 
                 print(f"✅ Loaded {len(df)} questions from PostgreSQL database")
+
+                # Cache using JSON serialization (more reliable than pickle)
+                try:
+                    import json
+                    # Convert DataFrame to JSON-serializable format
+                    cache_data = {
+                        'data': df.copy().to_dict('records'),
+                        'cached_at': time.time(),
+                        'count': len(df)
+                    }
+
+                    # Convert numpy arrays to lists for JSON serialization
+                    for record in cache_data['data']:
+                        for col in ['soft_cluster', 'openai_embedding', 'umap_embedding']:
+                            if col in record and record[col] is not None:
+                                if hasattr(record[col], 'tolist'):
+                                    record[col] = record[col].tolist()
+
+                    cached_json = json.dumps(cache_data, default=str)
+                    self.db.redis_client.setex(cache_key, 1800, cached_json)  # 30 minutes
+                    print(f"💾 Cached questions dataframe (JSON) for faster startup")
+                except Exception as e:
+                    print(f"⚠️ Could not cache questions data: {e}")
+
                 return df
 
         except Exception as e:
@@ -250,44 +323,31 @@ class OptimizedRecommendationEngine:
     def _build_transition_matrix_from_database(self, alpha=0.1, normalize=True):
         """Build transition matrix using soft cluster data from database"""
         try:
+            # Use the updated transition matrix function with database support
+            from ml.transition_matrix import _build_cooccurrence_transitions
+
             # Get soft clusters from the already loaded questions_df
-            if not hasattr(self, 'questions_df') or self.questions_df.empty:
-                print("❌ No questions data available for transition matrix building")
-                return None
+            if hasattr(self, 'soft_clusters') and self.soft_clusters is not None:
+                print(f"🔄 Building transition matrix using loaded soft clusters")
+                T = _build_cooccurrence_transitions(
+                    alpha=alpha,
+                    normalize=normalize,
+                    soft_clusters=self.soft_clusters,
+                    db_manager=self.db
+                )
+            else:
+                print(f"🔄 Building transition matrix from database")
+                T = _build_cooccurrence_transitions(
+                    alpha=alpha,
+                    normalize=normalize,
+                    db_manager=self.db
+                )
 
-            soft_clusters = np.stack(self.questions_df['soft_cluster'].values)
-            n_clusters = soft_clusters.shape[1]
-            n_questions = soft_clusters.shape[0]
+            if T is not None:
+                print(f"✅ Built transition matrix with shape {T.shape}")
+            else:
+                print(f"❌ Failed to build transition matrix")
 
-            print(f"🔄 Building transition matrix from {n_questions} questions with {n_clusters} clusters")
-
-            # Initialize transition matrix
-            T = np.zeros((n_clusters, n_clusters))
-
-            # Build co-occurrence transitions
-            for question_idx in range(n_questions):
-                clusters = soft_clusters[question_idx]
-
-                # Get significant clusters (above threshold)
-                significant_clusters = np.where(clusters > 0.1)[0]
-
-                # Add transitions between significant clusters
-                for i in significant_clusters:
-                    for j in significant_clusters:
-                        if i != j:
-                            # Weight by product of cluster memberships
-                            weight = clusters[i] * clusters[j]
-                            T[i, j] += weight
-
-            # Add self-loops with alpha
-            for i in range(n_clusters):
-                T[i, i] += alpha
-
-            # Normalize if requested
-            if normalize:
-                T = self._normalize_transition_matrix(T)
-
-            print(f"✅ Built transition matrix with shape {T.shape}")
             return T
 
         except Exception as e:
@@ -307,18 +367,40 @@ class OptimizedRecommendationEngine:
         return T_normalized
 
     def recommend_questions_optimized(self, student_id, objective='balanced', top_k=5):
-        """Database-optimized recommendations with caching"""
-        cache_key = f"recommendations:{student_id}:{objective}:{top_k}"
+        """Database-optimized recommendations with caching and cache invalidation"""
+        # Ensure components are initialized
+        if self.lazy_load:
+            self._ensure_initialized()
 
-        # Check Redis cache first
+        # Initialize cache service if not already done
+        if not hasattr(self, '_cache_service'):
+            from services.cache_service import CacheService
+            self._cache_service = CacheService(self.db.redis_client, self.db)
+
+        # Check cache validity first using versioning
+        current_version = self._cache_service.get_student_cache_version(str(student_id))
+
+        cache_key = f"recommendations:{student_id}:{objective}:{top_k}"
         cached = self.db.redis_client.get(cache_key)
+
         if cached:
-            return json.loads(cached)
+            cached_data = json.loads(cached)
+            cached_version = cached_data.get('cache_version')
+
+            # Check if cache is still valid
+            if self._cache_service.is_cache_valid(str(student_id), cached_version):
+                print(f"✅ Using valid cached recommendations for student {student_id}")
+                return cached_data.get('recommendations', cached_data)
+            else:
+                print(f"🔄 Cache invalid for student {student_id}, recomputing...")
+                # Invalidate this specific cache entry
+                self.db.redis_client.delete(cache_key)
 
         # Get student history (cached)
         student_history = self.db.get_student_history_optimized(student_id)
 
         if not student_history:
+            print("📋 No student history found, using default recommendations")
             return self._get_default_recommendations_db(top_k)
 
         # Get current state using database operations
@@ -327,83 +409,277 @@ class OptimizedRecommendationEngine:
         # Use PostgreSQL for similarity search
         recommendations = self._find_recommendations_db(current_state, student_history, top_k)
 
-        # Cache recommendations for 10 minutes
-        self.db.redis_client.setex(cache_key, 600, json.dumps(recommendations, default=str))
+        # Set current cache version if not exists
+        if not current_version:
+            current_version = str(time.time())
+            self._cache_service.set_student_cache_version(str(student_id), current_version)
+
+        # Cache recommendations with version information for 10 minutes
+        cache_data = {
+            'recommendations': recommendations,
+            'cache_version': current_version,
+            'cached_at': time.time()
+        }
+        self.db.redis_client.setex(cache_key, 600, json.dumps(cache_data, default=str))
+        print(f"💾 Cached recommendations for student {student_id} with version {current_version[:10]}...")
 
         return recommendations
 
     def _encode_student_context_db(self, student_id, student_history, objective='balanced'):
-        """Encode student context using database operations"""
+        """Create enriched vector from student history"""
+        # Check if enriched vector is cached first
+        if hasattr(self.db, 'redis_client'):
+            cache_service = getattr(self, '_cache_service', None)
+            if not cache_service:
+                from services.cache_service import CacheService
+                self._cache_service = CacheService(self.db.redis_client, self.db)
+                cache_service = self._cache_service
+
+            cached_vector = cache_service.get_cached_enriched_vector(str(student_id), objective)
+            if cached_vector is not None:
+                print(f"🧠 Using cached enriched vector for student {student_id}")
+                return cached_vector
+
         try:
-            # Create a simple cluster distribution based on student's past attempts
+            print(f"🧠 Encoding context for student {student_id} with {len(student_history)} attempts")
+
+            # Get the number of clusters from our matrix
+            n_clusters = 20  # Default
+            if hasattr(self, 'transition_matrix') and self.transition_matrix is not None:
+                n_clusters = self.transition_matrix.shape[0]
+
+            # Initialize cluster distribution
+            cluster_distribution = np.zeros(n_clusters)
+
+            if not student_history:
+                print("📋 No history - using uniform distribution")
+                return np.ones(n_clusters) / n_clusters
+
+            # Analyze recent vs older attempts (enriched context)
+            total_attempts = len(student_history)
+            recent_attempts = student_history[:min(10, total_attempts)]  # Last 10 attempts
+
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor()
 
-                # Get cluster distribution from student's attempted questions
+                # Get detailed cluster analysis for recent attempts
+                recent_ids = [h['internal_question_id'] for h in recent_attempts]
+
                 query = """
-                SELECT
-                    COALESCE(AVG(CAST(q.primary_cluster AS INTEGER)), 0) as avg_cluster,
-                    COUNT(*) as total_attempts
-                FROM student_attempts sa
-                JOIN questions q ON sa.internal_question_id = q.internal_question_id
-                WHERE sa.student_id = %s
+                SELECT q.soft_cluster, COUNT(*) as count,
+                       AVG(CASE WHEN sqh.is_correct THEN 1.0 ELSE 0.0 END) as success_rate
+                FROM questions q
+                JOIN student_question_history sqh ON q.internal_question_id = sqh.internal_question_id
+                JOIN student_paper_enrollments spe ON sqh.enrollment_id = spe.enrollment_id
+                WHERE q.internal_question_id = ANY(%s) AND spe.student_id = %s
+                  AND q.soft_cluster IS NOT NULL
+                GROUP BY q.soft_cluster
                 """
-                cursor.execute(query, (student_id,))
-                result = cursor.fetchone()
 
-                if result and result[1] > 0:  # Has attempts
-                    # Create a simple state vector favoring the average cluster
-                    avg_cluster = int(result[0])
-                    # Create a 20-dimensional vector (assuming 20 clusters)
-                    state_vector = np.zeros(20)
-                    if 0 <= avg_cluster < 20:
-                        state_vector[avg_cluster] = 1.0
-                        # Add some noise to adjacent clusters
-                        if avg_cluster > 0:
-                            state_vector[avg_cluster - 1] = 0.3
-                        if avg_cluster < 19:
-                            state_vector[avg_cluster + 1] = 0.3
+                cursor.execute(query, (recent_ids, student_id))
+                results = cursor.fetchall()
+
+                # Build enriched vector based on recent performance
+                for row in results:
+                    soft_cluster_str = row[0]
+                    attempt_count = row[1]
+                    success_rate = float(row[2]) if row[2] is not None else 0.0
+
+                    # Parse soft cluster array
+                    try:
+                        import ast
+                        soft_cluster = ast.literal_eval(soft_cluster_str)
+
+                        # Weight by recency and success rate
+                        base_weight = attempt_count * (0.5 + success_rate)
+
+                        # Distribute weight across all clusters based on membership strength
+                        for cluster_id, membership in enumerate(soft_cluster):
+                            if cluster_id < n_clusters and membership > 0.1:  # Threshold for meaningful membership
+                                weight = base_weight * membership
+                                cluster_distribution[cluster_id] += weight
+
+                                # Add adjacent cluster influence (transition tendency)
+                                if cluster_id > 0:
+                                    cluster_distribution[cluster_id - 1] += weight * 0.1
+                                if cluster_id < n_clusters - 1:
+                                    cluster_distribution[cluster_id + 1] += weight * 0.1
+                    except Exception as e:
+                        print(f"⚠️ Could not parse soft cluster: {soft_cluster_str}")
+
+                # Normalize
+                if cluster_distribution.sum() > 0:
+                    cluster_distribution = cluster_distribution / cluster_distribution.sum()
                 else:
-                    # New student - uniform distribution
-                    state_vector = np.ones(20) / 20
+                    cluster_distribution = np.ones(n_clusters) / n_clusters
 
-                return state_vector
+                # Objective-based adjustment
+                if objective == 'coverage':
+                    # Boost underexplored clusters
+                    weak_clusters = cluster_distribution < 0.1
+                    cluster_distribution[weak_clusters] += 0.1
+                elif objective == 'efficiency':
+                    # Focus on strong clusters
+                    cluster_distribution = cluster_distribution ** 2
+
+                # Final normalization
+                cluster_distribution = cluster_distribution / cluster_distribution.sum()
+
+                print(f"✅ Created enriched vector - top clusters: {np.argsort(cluster_distribution)[-3:][::-1]}")
+
+                # Cache the computed enriched vector
+                if hasattr(self, '_cache_service'):
+                    self._cache_service.cache_enriched_vector(str(student_id), objective, cluster_distribution)
+
+                return cluster_distribution
 
         except Exception as e:
-            print(f"Error encoding student context: {e}")
+            print(f"❌ Error encoding student context: {e}")
             # Return uniform distribution as fallback
             return np.ones(20) / 20
 
     def _find_recommendations_db(self, current_state, student_history, top_k):
-        """Use PostgreSQL vector operations for recommendations"""
+        """Find recommendations using student context and transition matrix"""
         attempted_questions = {h['internal_question_id'] for h in student_history}
 
-        with self.db.get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+        try:
+            # Step 1: Use transition matrix to find next promising clusters
+            if hasattr(self, 'transition_matrix') and self.transition_matrix is not None:
+                # Get next cluster probabilities
+                next_cluster_probs = np.dot(current_state, self.transition_matrix)
+                # Get top 3 cluster indices
+                top_clusters = np.argsort(next_cluster_probs)[-3:][::-1]
+                print(f"🎯 Recommending from clusters: {top_clusters}")
+            else:
+                # Fallback: use current strong clusters as probabilities
+                next_cluster_probs = current_state
+                top_clusters = np.argsort(current_state)[-3:][::-1]
+                print(f"🎯 Using current strong clusters: {top_clusters}")
 
-            # Use simple PostgreSQL operations
-            query = """
-            SELECT q.internal_question_id, q.question_id, q.paper_id, q.primary_cluster,
-                   -- Simple random score for now (can be improved later)
-                   RANDOM() as cluster_alignment_score,
-                   q.primary_cluster as dominant_cluster,
-                   1.0 as cluster_priority
-            FROM questions q
-            WHERE q.internal_question_id NOT IN %s
-            ORDER BY RANDOM()
-            LIMIT %s
-            """
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-            cursor.execute(query, (
-                tuple(attempted_questions) if attempted_questions else (0,),
-                top_k
-            ))
+                # Step 2: Get more questions for better scoring
+                query = """
+                SELECT q.internal_question_id, q.question_id, q.paper_id,
+                       q.soft_cluster, q.combined_text
+                FROM questions q
+                WHERE q.internal_question_id NOT IN %s
+                  AND q.soft_cluster IS NOT NULL
+                ORDER BY RANDOM()
+                LIMIT %s
+                """
 
-            return cursor.fetchall()
+                cursor.execute(query, (
+                    tuple(attempted_questions) if attempted_questions else (0,),
+                    min(100, top_k * 20)  # Get many questions to score
+                ))
+
+                results = cursor.fetchall()
+                print(f"📊 Retrieved {len(results)} questions for scoring")
+
+                # Step 3: Score questions using cluster priorities (CORE ALGORITHM!)
+                scored_questions = []
+                for row in results:
+                    if row['soft_cluster']:
+                        try:
+                            import ast
+                            question_clusters = np.array(ast.literal_eval(row['soft_cluster']), dtype=float)
+
+                            # Ensure both arrays have the same length
+                            min_len = min(len(question_clusters), len(next_cluster_probs))
+                            if min_len > 0:
+                                q_clusters = question_clusters[:min_len]
+                                n_probs = next_cluster_probs[:min_len]
+
+                                # CORE ALGORITHM: Score = weighted sum of cluster priorities
+                                score = np.sum(q_clusters * n_probs)
+
+                                primary_cluster = np.argmax(q_clusters)
+                                cluster_strength = np.max(q_clusters)
+
+                                scored_questions.append({
+                                    'question_id': row['question_id'],
+                                    'internal_question_id': row['internal_question_id'],
+                                    'score': float(score),
+                                    'primary_cluster': int(primary_cluster),
+                                    'cluster_strength': float(cluster_strength),
+                                    'reasoning': f'ML-scored: {score:.3f} alignment with learning path',
+                                    'paper_id': row['paper_id']
+                                })
+                        except Exception as e:
+                            print(f"⚠️ Could not score question {row['question_id']}: {e}")
+
+                # Sort by score (highest first) and take top_k
+                if scored_questions:
+                    scored_questions.sort(key=lambda x: x['score'], reverse=True)
+                    recommendations = scored_questions[:top_k]
+
+                    print(f"🎯 Scored {len(scored_questions)} questions, selected top {len(recommendations)}")
+                    for i, rec in enumerate(recommendations, 1):
+                        print(f"   {i}. Q{rec['question_id']}: Score={rec['score']:.3f}, Cluster={rec['primary_cluster']}")
+
+                    return recommendations
+                else:
+                    print("⚠️ No questions could be scored, using fallback")
+                    return self._get_simple_fallback_recommendations(attempted_questions, top_k)
+
+        except Exception as e:
+            print(f"❌ Error in _find_recommendations_db: {e}")
+            # Fallback to simple random selection
+            return self._get_simple_fallback_recommendations(attempted_questions, top_k)
+
+    def _get_simple_fallback_recommendations(self, attempted_questions, top_k):
+        """Simple fallback when main recommendation logic fails"""
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+                query = """
+                SELECT internal_question_id, question_id, paper_id, soft_cluster
+                FROM questions
+                WHERE internal_question_id NOT IN %s
+                  AND soft_cluster IS NOT NULL
+                ORDER BY RANDOM()
+                LIMIT %s
+                """
+
+                cursor.execute(query, (
+                    tuple(attempted_questions) if attempted_questions else (0,),
+                    top_k
+                ))
+
+                results = cursor.fetchall()
+                recommendations = []
+                for row in results:
+                    # Calculate primary cluster from soft_cluster
+                    primary_cluster = 0
+                    if row['soft_cluster']:
+                        try:
+                            import ast
+                            cluster_array = ast.literal_eval(row['soft_cluster'])
+                            primary_cluster = cluster_array.index(max(cluster_array))
+                        except:
+                            primary_cluster = 0
+
+                    recommendations.append({
+                        'question_id': row['question_id'],
+                        'internal_question_id': row['internal_question_id'],
+                        'score': 0.5,
+                        'primary_cluster': primary_cluster,
+                        'reasoning': 'Random fallback recommendation',
+                        'paper_id': row['paper_id']
+                    })
+
+                return recommendations
+
+        except Exception as e:
+            print(f"❌ Even fallback failed: {e}")
+            return []
 
     def _get_default_recommendations_db(self, top_k):
         """Fallback recommendations when no student history"""
-        print("📋 Using default recommendations...")
+        print(f"📋 Using default recommendations for {top_k} questions...")
 
         # Use database instead of dataframe
         try:
@@ -412,8 +688,9 @@ class OptimizedRecommendationEngine:
 
                 # Get random questions from different clusters
                 query = """
-                SELECT internal_question_id, question_id, paper_id, primary_cluster
+                SELECT internal_question_id, question_id, paper_id, soft_cluster
                 FROM questions
+                WHERE soft_cluster IS NOT NULL
                 ORDER BY RANDOM()
                 LIMIT %s
                 """
@@ -421,21 +698,34 @@ class OptimizedRecommendationEngine:
                 cursor.execute(query, (top_k,))
                 results = cursor.fetchall()
 
+                print(f"📊 Found {len(results)} questions for default recommendations")
+
                 recommendations = []
                 for row in results:
+                    # Calculate primary cluster
+                    primary_cluster = 0
+                    if row['soft_cluster']:
+                        try:
+                            import ast
+                            cluster_array = ast.literal_eval(row['soft_cluster'])
+                            primary_cluster = cluster_array.index(max(cluster_array))
+                        except:
+                            primary_cluster = 0
+
                     recommendations.append({
                         'question_id': row['question_id'],
                         'internal_question_id': row['internal_question_id'],
                         'score': 1.0,
-                        'primary_cluster': row['primary_cluster'],
-                        'cluster_strength': 1.0,
+                        'primary_cluster': primary_cluster,
+                        'reasoning': 'Default recommendation for new student',
                         'paper_id': row['paper_id']
                     })
 
+                print(f"✅ Generated {len(recommendations)} default recommendations")
                 return recommendations
 
         except Exception as e:
-            print(f"Error getting default recommendations: {e}")
+            print(f"❌ Error getting default recommendations: {e}")
             return []
 
     def analyze_recommendations(self, student_id, objectives=['coverage', 'efficiency', 'success_rate', 'balanced']):

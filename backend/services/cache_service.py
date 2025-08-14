@@ -55,6 +55,134 @@ class CacheService:
             print(f"Error caching recommendations: {e}")
             return False
 
+    def get_cached_student_history(self, student_id: str) -> Optional[List[Dict[str, Any]]]:
+        """Get cached student history"""
+        try:
+            cache_key = f"student_history:{student_id}"
+            cached_value = self.redis.get(cache_key)
+            if cached_value:
+                self.cache_stats['hits'] += 1
+                return json.loads(cached_value)
+
+            self.cache_stats['misses'] += 1
+            return None
+        except Exception as e:
+            print(f"Error getting cached student history: {e}")
+            return None
+
+    def cache_student_history(self, student_id: str, history: List[Dict[str, Any]], ttl: int = 3600) -> bool:
+        """Cache student history for 1 hour"""
+        try:
+            cache_key = f"student_history:{student_id}"
+            self.redis.setex(cache_key, ttl, json.dumps(history, default=str))
+            self.cache_stats['sets'] += 1
+            return True
+        except Exception as e:
+            print(f"Error caching student history: {e}")
+            return False
+
+    def get_cached_enriched_vector(self, student_id: str, objective: str) -> Optional[Any]:
+        """Get cached enriched vector for a student and objective"""
+        try:
+            cache_key = f"enriched_vector:{student_id}:{objective}"
+            cached_value = self.redis.get(cache_key)
+            if cached_value:
+                self.cache_stats['hits'] += 1
+                import numpy as np
+                return np.array(json.loads(cached_value))
+
+            self.cache_stats['misses'] += 1
+            return None
+        except Exception as e:
+            print(f"Error getting cached enriched vector: {e}")
+            return None
+
+    def cache_enriched_vector(self, student_id: str, objective: str, vector: Any, ttl: int = 1800) -> bool:
+        """Cache enriched vector for 30 minutes"""
+        try:
+            cache_key = f"enriched_vector:{student_id}:{objective}"
+            # Convert numpy array to list for JSON serialization
+            vector_list = vector.tolist() if hasattr(vector, 'tolist') else vector
+            self.redis.setex(cache_key, ttl, json.dumps(vector_list))
+            self.cache_stats['sets'] += 1
+            return True
+        except Exception as e:
+            print(f"Error caching enriched vector: {e}")
+            return False
+
+    def invalidate_student_cache(self, student_id: str) -> bool:
+        """Invalidate all cached data for a student when their history changes"""
+        try:
+            student_str = str(student_id)
+            keys_to_delete = []
+
+            # Find all keys related to this student
+            pattern_prefixes = [
+                f"student_history:{student_str}",
+                f"enriched_vector:{student_str}:*",
+                f"recommendations:{student_str}:*"
+            ]
+
+            for prefix in pattern_prefixes:
+                if "*" in prefix:
+                    # Use SCAN to find matching keys
+                    for key in self.redis.scan_iter(match=prefix):
+                        keys_to_delete.append(key)
+                else:
+                    # Direct key
+                    keys_to_delete.append(prefix)
+
+            # Delete all found keys
+            if keys_to_delete:
+                deleted = self.redis.delete(*keys_to_delete)
+                print(f"🗑️ Invalidated {deleted} cache entries for student {student_id}")
+                self.cache_stats['deletes'] += deleted
+                return True
+
+            return True
+        except Exception as e:
+            print(f"Error invalidating student cache: {e}")
+            return False
+
+    def get_student_cache_version(self, student_id: str) -> Optional[str]:
+        """Get the current cache version for a student (based on last activity)"""
+        try:
+            cache_key = f"student_version:{student_id}"
+            version = self.redis.get(cache_key)
+            return version.decode() if version else None
+        except Exception as e:
+            print(f"Error getting student cache version: {e}")
+            return None
+
+    def set_student_cache_version(self, student_id: str, version: str = None) -> bool:
+        """Set a new cache version for a student (auto-generates timestamp if not provided)"""
+        try:
+            if version is None:
+                version = str(time.time())
+
+            cache_key = f"student_version:{student_id}"
+            self.redis.set(cache_key, version)
+            return True
+        except Exception as e:
+            print(f"Error setting student cache version: {e}")
+            return False
+
+    def is_cache_valid(self, student_id: str, cached_version: str = None) -> bool:
+        """Check if cached data is still valid by comparing versions"""
+        try:
+            current_version = self.get_student_cache_version(student_id)
+            if not current_version:
+                return False
+
+            if cached_version and cached_version != current_version:
+                print(f"🔄 Cache version mismatch for student {student_id}: {cached_version} vs {current_version}")
+                return False
+
+            return True
+        except Exception as e:
+            print(f"Error checking cache validity: {e}")
+            return False
+
     def get_or_compute(self, cache_key: str, compute_function, ttl: int = 3600, *args, **kwargs) -> Any:
         """Get from cache or compute and cache the result"""
         try:

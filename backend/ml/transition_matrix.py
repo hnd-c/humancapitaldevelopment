@@ -1,6 +1,53 @@
 import numpy as np
 import pandas as pd
 
+
+def load_clusters_from_database(db_manager):
+    """Load soft clusters from database"""
+    try:
+        with db_manager.get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            query = """
+            SELECT soft_cluster
+            FROM questions
+            WHERE soft_cluster IS NOT NULL
+            ORDER BY internal_question_id
+            """
+
+            cursor.execute(query)
+            results = cursor.fetchall()
+
+            if not results:
+                print("❌ No soft clusters found in database")
+                return None
+
+            # Parse soft cluster strings to numpy arrays
+            soft_clusters = []
+            for row in results:
+                cluster_str = row[0]
+                if isinstance(cluster_str, str):
+                    # Parse string like '[0,0,0,1,0,...]' to numpy array
+                    import ast
+                    try:
+                        cluster_array = np.array(ast.literal_eval(cluster_str), dtype=np.float32)
+                        soft_clusters.append(cluster_array)
+                    except:
+                        print(f"⚠️ Could not parse cluster: {cluster_str}")
+                        continue
+                elif cluster_str is not None:
+                    soft_clusters.append(np.array(cluster_str, dtype=np.float32))
+
+            if soft_clusters:
+                return np.stack(soft_clusters)
+            else:
+                print("❌ No valid soft clusters found")
+                return None
+
+    except Exception as e:
+        print(f"❌ Error loading clusters from database: {e}")
+        return None
+
 def _normalize_transition_matrix(T):
     """Normalize each row to sum to 1 (valid probability distribution)"""
     T_normalized = T.copy()
@@ -15,25 +62,68 @@ def _normalize_transition_matrix(T):
     return T_normalized
 
 
-def _build_cooccurrence_transitions(alpha=0.1, normalize=True):
+def _build_cooccurrence_transitions(alpha=0.1, normalize=True, soft_clusters=None, db_manager=None):
     """
     Build transitions based on how often clusters co-occur in the same questions
     Logic: If a question involves both cluster i and j, there should be transitions i→j and j→i
+
+    Args:
+        alpha: Self-transition weight
+        normalize: Whether to normalize rows to sum to 1
+        soft_clusters: Pre-computed soft clusters (numpy array)
+        db_manager: Database manager for loading clusters from database
     """
-    try:
-        # Load from combined_questions.parquet (based on enriched_vector.py pattern)
-        df = pd.read_parquet("../combined_questions.parquet")
-        soft_clusters = np.stack(df['soft_cluster'].values)  # Convert to numpy array
+
+    # If soft_clusters provided directly, use them
+    if soft_clusters is not None:
         n_clusters = soft_clusters.shape[1]
         n_questions = soft_clusters.shape[0]
-        print(f"✅ Loaded {n_questions} questions with {n_clusters} clusters")
-    except FileNotFoundError:
-        print("❌ combined_questions.parquet not found!")
-        print("💡 Make sure the clustering data is available")
-        return None
-    except Exception as e:
-        print(f"❌ Error loading clustering data: {e}")
-        return None
+        print(f"✅ Using provided soft clusters: {n_questions} questions with {n_clusters} clusters")
+
+    # If database manager provided, load from database
+    elif db_manager is not None:
+        try:
+            soft_clusters = load_clusters_from_database(db_manager)
+            if soft_clusters is None:
+                return None
+            n_clusters = soft_clusters.shape[1]
+            n_questions = soft_clusters.shape[0]
+            print(f"✅ Loaded from database: {n_questions} questions with {n_clusters} clusters")
+        except Exception as e:
+            print(f"❌ Error loading clusters from database: {e}")
+            return None
+
+    # Fallback to parquet file (original behavior)
+    else:
+        try:
+            # Try different possible paths
+            possible_paths = [
+                "combined_questions.parquet",
+                "../combined_questions.parquet",
+                "data/combined_questions.parquet"
+            ]
+
+            df = None
+            for path in possible_paths:
+                try:
+                    df = pd.read_parquet(path)
+                    print(f"✅ Loaded clusters from: {path}")
+                    break
+                except FileNotFoundError:
+                    continue
+
+            if df is None:
+                print("❌ combined_questions.parquet not found in any expected location!")
+                print("💡 Make sure the clustering data is available or provide soft_clusters/db_manager")
+                return None
+
+            soft_clusters = np.stack(df['soft_cluster'].values)  # Convert to numpy array
+            n_clusters = soft_clusters.shape[1]
+            n_questions = soft_clusters.shape[0]
+            print(f"✅ Loaded {n_questions} questions with {n_clusters} clusters")
+        except Exception as e:
+            print(f"❌ Error loading clustering data: {e}")
+            return None
 
     T = np.zeros((n_clusters, n_clusters))
 
@@ -148,13 +238,13 @@ def load_transition_matrix(filename):
         return None
 
 
-def demonstrate_recommendations():
+def demonstrate_recommendations(db_manager=None):
     """Demonstrate how to use transition matrix for recommendations"""
     print(f"\n🚀 DEMONSTRATION: Learning Path Recommendations")
     print("=" * 60)
 
     # Build transition matrix
-    T = _build_cooccurrence_transitions(alpha=0.1, normalize=True)
+    T = _build_cooccurrence_transitions(alpha=0.1, normalize=True, db_manager=db_manager)
     if T is None:
         return
 
@@ -184,13 +274,13 @@ def demonstrate_recommendations():
     return T, current_state, next_state
 
 
-def main():
+def main(db_manager=None):
     """Main function to build and analyze transition matrix"""
     print(f"🔄 BUILDING CO-OCCURRENCE TRANSITION MATRIX")
     print("=" * 60)
 
     # Build transition matrix
-    T = _build_cooccurrence_transitions(alpha=0.1, normalize=True)
+    T = _build_cooccurrence_transitions(alpha=0.1, normalize=True, db_manager=db_manager)
 
     if T is None:
         print("❌ Cannot proceed without clustering data")
@@ -208,7 +298,7 @@ def main():
     filename = save_transition_matrix(T)
 
     # Demonstrate usage
-    demonstrate_recommendations()
+    demonstrate_recommendations(db_manager)
 
     print(f"\n✅ TRANSITION MATRIX SYSTEM READY!")
     print("=" * 60)

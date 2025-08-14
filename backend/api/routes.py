@@ -20,6 +20,13 @@ import base64
 # Import our system components
 from main import HumanCapitalDevelopmentSystem
 from config.environments import load_config_for_environment
+from api.schemas import (
+    RecommendationRequest, RecommendationResponse,
+    StudentHistoryResponse, PerformanceAnalysisResponse,
+    SystemAnalyticsResponse, StudentSessionRequest, StudentSessionResponse,
+    QuestionAttemptRequest, QuestionAttemptResponse,
+    AnswerSubmissionRequest, AnswerSubmissionResponse
+)
 
 
 # Global system instance
@@ -385,6 +392,233 @@ async def get_system_analytics(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analytics generation failed: {e}")
 
+
+# Student Learning Workflow Endpoints
+
+@app.post("/student/{student_id}/start-session", response_model=StudentSessionResponse)
+async def start_learning_session(
+    student_id: str,
+    request: StudentSessionRequest,
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Start a new learning session for a student"""
+    try:
+        from services.student_interaction_service import StudentInteractionService
+        from services.cache_service import CacheService
+
+        cache_service = CacheService(system.db_manager.redis_client, system.db_manager)
+        interaction_service = StudentInteractionService(system.db_manager, cache_service)
+
+        session_data = interaction_service.start_learning_session(
+            student_id=student_id,
+            objective=request.objective,
+            session_type=request.session_type,
+            target_questions=request.target_questions or 10
+        )
+
+        return StudentSessionResponse(**session_data)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start session: {str(e)}")
+
+@app.post("/student/{student_id}/attempt-question", response_model=QuestionAttemptResponse)
+async def start_question_attempt(
+    student_id: str,
+    request: QuestionAttemptRequest,
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Start attempting a question"""
+    try:
+        from services.student_interaction_service import StudentInteractionService
+        from services.cache_service import CacheService
+
+        cache_service = CacheService(system.db_manager.redis_client, system.db_manager)
+        interaction_service = StudentInteractionService(system.db_manager, cache_service)
+
+        attempt_data = interaction_service.start_question_attempt(
+            student_id=student_id,
+            question_id=request.question_id,
+            session_id=getattr(request, 'session_id', None)
+        )
+
+        return QuestionAttemptResponse(**attempt_data)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start question attempt: {str(e)}")
+
+@app.post("/student/{student_id}/submit-answer", response_model=AnswerSubmissionResponse)
+async def submit_student_answer(
+    student_id: str,
+    request: AnswerSubmissionRequest,
+    auto_validate: bool = True,  # New parameter for auto-validation
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Submit an answer for a question with automatic validation"""
+    try:
+        from services.student_interaction_service import StudentInteractionService
+        from services.cache_service import CacheService
+
+        cache_service = CacheService(system.db_manager.redis_client, system.db_manager)
+        interaction_service = StudentInteractionService(system.db_manager, cache_service)
+
+        submission_data = interaction_service.submit_answer(
+            attempt_id=request.attempt_id,
+            student_id=student_id,
+            question_id=request.question_id,
+            answer_text=request.answer_text,
+            selected_option=request.selected_option,
+            is_correct=request.is_correct,
+            confidence_level=request.confidence_level,
+            time_spent_seconds=request.time_spent_seconds,
+            submission_method=request.submission_method,
+            metadata=request.metadata or {},
+            auto_validate=auto_validate  # Enable auto-validation
+        )
+
+        return AnswerSubmissionResponse(**submission_data)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to submit answer: {str(e)}")
+
+@app.get("/student/{student_id}/session/{session_id}/progress")
+async def get_session_progress(
+    student_id: str,
+    session_id: str,
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Get progress for a learning session"""
+    try:
+        from services.student_interaction_service import StudentInteractionService
+        from services.cache_service import CacheService
+
+        cache_service = CacheService(system.db_manager.redis_client, system.db_manager)
+        interaction_service = StudentInteractionService(system.db_manager, cache_service)
+
+        progress = interaction_service.get_student_session_progress(session_id)
+
+        return {
+            "student_id": student_id,
+            "session_id": session_id,
+            "progress": progress,
+            "retrieved_at": time.time()
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get session progress: {str(e)}")
+
+@app.get("/student/{student_id}/sessions")
+async def get_student_sessions(
+    student_id: str,
+    limit: int = 10,
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Get recent learning sessions for a student"""
+    try:
+        with system.db_manager.get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=system.db_manager.RealDictCursor)
+
+            cursor.execute("""
+                SELECT session_id, objective, session_type, target_questions,
+                       started_at, completed_at, status
+                FROM student_learning_sessions
+                WHERE student_id = %s
+                ORDER BY started_at DESC
+                LIMIT %s
+            """, (student_id, limit))
+
+            sessions = [dict(row) for row in cursor.fetchall()]
+
+            return {
+                "student_id": student_id,
+                "sessions": sessions,
+                "total_sessions": len(sessions)
+            }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get student sessions: {str(e)}")
+
+# Answer Validation and Timing Endpoints
+
+@app.get("/questions/{question_id}/answer-key")
+async def get_question_answer_key(
+    question_id: str,
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Get answer key and timing data for a question (for admin/teacher use)"""
+    try:
+        from services.answer_validation_service import AnswerValidationService
+
+        validator = AnswerValidationService(system.db_manager)
+
+        answer_key = validator.get_question_answer_key(question_id)
+        timing_data = validator.get_question_difficulty_timing(question_id)
+
+        if not answer_key:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        return {
+            "question_id": question_id,
+            "answer_key": answer_key,
+            "timing_stats": timing_data,
+            "retrieved_at": time.time()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get answer key: {str(e)}")
+
+@app.post("/questions/{question_id}/validate-answer")
+async def validate_answer(
+    question_id: str,
+    answer_data: dict,  # {"student_answer": "C", "answer_type": "multiple_choice"}
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Validate an answer without submitting to student history"""
+    try:
+        from services.answer_validation_service import AnswerValidationService
+
+        validator = AnswerValidationService(system.db_manager)
+
+        student_answer = answer_data.get('student_answer')
+        answer_type = answer_data.get('answer_type', 'multiple_choice')
+
+        if not student_answer:
+            raise HTTPException(status_code=400, detail="student_answer is required")
+
+        result = validator.validate_answer(question_id, student_answer, answer_type)
+
+        return {
+            "question_id": question_id,
+            "validation_result": result,
+            "validated_at": time.time()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to validate answer: {str(e)}")
+
+@app.get("/questions/{question_id}/timing-stats")
+async def get_question_timing_stats(
+    question_id: str,
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Get timing statistics for a question"""
+    try:
+        from services.answer_validation_service import AnswerValidationService
+
+        validator = AnswerValidationService(system.db_manager)
+        timing_data = validator.get_question_difficulty_timing(question_id)
+
+        return {
+            "question_id": question_id,
+            "timing_statistics": timing_data,
+            "retrieved_at": time.time()
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get timing stats: {str(e)}")
 
 @app.post("/cache/invalidate")
 async def invalidate_cache(

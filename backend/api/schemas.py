@@ -97,6 +97,65 @@ class StudentHistoryResponse(BaseModel):
     history: List[StudentHistoryRecord]
 
 
+# Student Workflow Schemas
+class QuestionAttemptRequest(BaseModel):
+    """Request to start attempting a question"""
+    student_id: str
+    question_id: str
+    started_at: Optional[float] = None  # Unix timestamp
+
+class QuestionAttemptResponse(BaseModel):
+    """Response when starting a question attempt"""
+    attempt_id: str
+    student_id: str
+    question_id: str
+    question_data: Dict[str, Any]
+    started_at: float
+    status: str = "in_progress"
+
+class AnswerSubmissionRequest(BaseModel):
+    """Request to submit an answer"""
+    attempt_id: str
+    student_id: str
+    question_id: str
+    answer_text: Optional[str] = None
+    selected_option: Optional[str] = None
+    is_correct: Optional[bool] = None
+    confidence_level: Optional[float] = None  # 0.0 to 1.0
+    time_spent_seconds: Optional[float] = None
+    submission_method: Optional[str] = "manual"  # manual, auto_submit, timeout
+    metadata: Optional[Dict[str, Any]] = {}
+
+class AnswerSubmissionResponse(BaseModel):
+    """Response after submitting an answer"""
+    submission_id: str
+    student_id: str
+    question_id: str
+    is_correct: bool
+    time_spent_seconds: float
+    submitted_at: float
+    feedback: Optional[str] = None
+    cache_invalidated: bool = True
+    next_recommendations_available: bool = True
+
+class StudentSessionRequest(BaseModel):
+    """Request to start a learning session"""
+    student_id: str
+    objective: str = "balanced"
+    session_type: str = "practice"  # practice, assessment, review
+    target_questions: Optional[int] = 10
+
+class StudentSessionResponse(BaseModel):
+    """Response when starting a learning session"""
+    session_id: str
+    student_id: str
+    objective: str
+    session_type: str
+    recommendations: List[Dict[str, Any]]
+    session_started_at: float
+    estimated_duration_minutes: Optional[int] = None
+
+
 class ClusterPerformance(BaseModel):
     """Performance metrics for a topic cluster"""
     cluster_id: int
