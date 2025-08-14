@@ -219,10 +219,9 @@ CREATE INDEX idx_questions_external_id ON questions(question_id);
 CREATE INDEX idx_questions_text_length ON questions(text_length);
 CREATE INDEX idx_questions_source_file ON questions(source_file);
 
--- VECTOR SIMILARITY INDEXES (Updated for correct dimensions)
--- Adjust 'lists' parameter based on your dataset size (sqrt(4560) ≈ 67, so 100 is good)
-CREATE INDEX idx_questions_openai_cosine ON questions USING ivfflat (openai_embedding vector_cosine_ops) WITH (lists = 100);
-CREATE INDEX idx_questions_openai_l2 ON questions USING ivfflat (openai_embedding vector_l2_ops) WITH (lists = 100);
+-- VECTOR SIMILARITY INDEXES (Updated for 3072 dimensions)
+-- Note: Half-precision indexes for OpenAI embeddings will be created after data loading
+-- Run create_halfprecision_indexes.sql after loading your vector data
 CREATE INDEX idx_questions_umap_cosine ON questions USING ivfflat (umap_embedding vector_cosine_ops) WITH (lists = 100);
 CREATE INDEX idx_questions_umap_l2 ON questions USING ivfflat (umap_embedding vector_l2_ops) WITH (lists = 100);
 CREATE INDEX idx_questions_cluster_cosine ON questions USING ivfflat (soft_cluster vector_cosine_ops) WITH (lists = 50);
