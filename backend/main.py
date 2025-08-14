@@ -21,7 +21,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config.environments import load_config_for_environment
 from bootstrap.system_initializer import SystemInitializer
 from services.recommendation_service import OptimizedRecommendationEngine
-from api.routes import create_app
 
 
 class HumanCapitalDevelopmentSystem:

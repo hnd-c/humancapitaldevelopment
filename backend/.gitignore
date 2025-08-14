@@ -11,3 +11,4 @@ __pycache__
 *.parquet
 *.csv
 *.npz
+*.DS_Store

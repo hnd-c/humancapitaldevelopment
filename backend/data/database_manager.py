@@ -10,6 +10,7 @@ class DatabaseManager:
     def __init__(self, db_config, redis_config):
         self.db_config = db_config
         self.redis_client = redis.Redis(**redis_config)
+        self.RealDictCursor = RealDictCursor  # Make RealDictCursor accessible
 
     @contextmanager
     def get_db_connection(self):

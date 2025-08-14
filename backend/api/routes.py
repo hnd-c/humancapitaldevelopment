@@ -17,7 +17,8 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 # Import our system components
-from main_system import HumanCapitalDevelopmentSystem, create_default_config, SystemConfig
+from main import HumanCapitalDevelopmentSystem
+from config.environments import load_config_for_environment
 
 
 # Global system instance
@@ -32,8 +33,8 @@ async def lifespan(app: FastAPI):
     print("🚀 Starting Human Capital Development API Server...")
 
     # Initialize system
-    config = create_default_config()
-    system = HumanCapitalDevelopmentSystem(config)
+    config = load_config_for_environment('development')
+    system = HumanCapitalDevelopmentSystem(config, 'development')
 
     print("✅ API Server ready to serve requests")
 

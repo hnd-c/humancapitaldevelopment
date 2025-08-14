@@ -15,12 +15,11 @@ import sys
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 
-# Import existing components (will be updated after reorganization)
+# Import existing components
 from data.database_manager import DatabaseManager
-from data.redis_manager import RedisCacheManager
-from ml.vector_encoder import RichVectorEncoder
+from services.cache_service import CacheService
 from services.performance_service import PerformanceMonitor
-from config.settings import SystemConfig
+from config.environments import SystemConfig
 
 
 class SystemInitializer:
@@ -37,7 +36,6 @@ class SystemInitializer:
 
         # Initialize components in order
         self._initialize_database_layer()
-        self._initialize_ml_components()
         self._initialize_monitoring()
 
         print(f"✅ System initialized successfully in {time.time() - self.start_time:.2f}s")
@@ -50,12 +48,12 @@ class SystemInitializer:
         try:
             # Database manager
             self.db_manager = DatabaseManager(
-                db_config=self.config.db_config,
-                redis_config=self.config.redis_config
+                db_config=self.config.database.to_dict(),
+                redis_config=self.config.redis.to_dict()
             )
 
             # Cache manager
-            self.cache_manager = RedisCacheManager(self.db_manager.redis_client)
+            self.cache_manager = CacheService(self.db_manager.redis_client)
 
             # Test connections
             with self.db_manager.get_db_connection() as conn:
@@ -72,23 +70,13 @@ class SystemInitializer:
             print(f"❌ Failed to initialize database layer: {e}")
             raise
 
-    def _initialize_ml_components(self):
-        """Initialize ML pipeline components"""
-        print("🧠 Initializing ML components...")
 
-        try:
-            # This will be implemented after file reorganization
-            print("✅ ML components initialized")
-
-        except Exception as e:
-            print(f"❌ Failed to initialize ML components: {e}")
-            raise
 
     def _initialize_monitoring(self):
         """Initialize performance monitoring"""
         print("📈 Initializing performance monitoring...")
 
-        if self.config.enable_performance_monitoring:
+        if self.config.performance.enable_monitoring:
             self.performance_monitor = PerformanceMonitor(self.db_manager.redis_client)
             print("✅ Performance monitoring enabled")
         else:

@@ -7,7 +7,7 @@ This module handles:
 - Middleware and error handling
 """
 
-from .routes import *
+# Import only what's needed to avoid circular imports
 from .schemas import *
 from .middleware import *
 

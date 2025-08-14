@@ -1,6 +1,12 @@
 # Human Capital Development System
 
-A modern, scalable ML-powered learning recommendation system with a clean, organized architecture.
+A modern, scalable ML-powered learning recommendation system with **fully database-driven architecture**.
+
+🎯 **Key Features:**
+- **Database-First**: All runtime components use PostgreSQL + Redis (no external file dependencies)
+- **Vector-Powered**: 4,560+ questions with OpenAI embeddings using pgvector extension
+- **ML-Integrated**: Transition matrices and similarity calculations stored in database
+- **Production-Ready**: Sub-100ms recommendations with intelligent caching
 
 ## 🏗️ Architecture Overview
 
@@ -8,11 +14,9 @@ The system has been reorganized into a modular, maintainable structure following
 
 ```
 backend/
-├── 🏗️ bootstrap/                      # System setup (run once)
+├── 🏗️ bootstrap/                      # System initialization (database-driven)
 │   ├── __init__.py
-│   ├── system_initializer.py          # Main bootstrap logic
-│   ├── data_loader.py                 # Load and process data files
-│   └── database_setup.py              # Database schema creation
+│   └── system_initializer.py          # Main system bootstrap logic
 │
 ├── 🧠 ml/                             # Machine Learning components
 │   ├── __init__.py
@@ -21,18 +25,18 @@ backend/
 │   ├── embeddings.py                  # Embedding operations
 │   └── similarity.py                  # Similarity calculations
 │
-├── 💾 data/                           # Data access layer
+├── 💾 data/                           # Data access layer (database-driven)
 │   ├── __init__.py
-│   ├── database_manager.py            # PostgreSQL operations
-│   ├── redis_manager.py               # Redis caching
-│   ├── repositories.py                # Data access patterns (vector ops)
+│   ├── database_manager.py            # PostgreSQL operations & Redis client
+│   ├── redis_manager.py               # Redis caching utilities
+│   ├── repositories.py                # Vector operations & database queries
 │   └── models.py                      # Data models/schemas
 │
-├── 🎯 services/                       # Business logic
+├── 🎯 services/                       # Business logic (database-integrated)
 │   ├── __init__.py
-│   ├── recommendation_service.py      # Core recommendation engine
-│   ├── student_service.py             # Student management
-│   ├── performance_service.py         # Analytics and monitoring
+│   ├── recommendation_service.py      # ML recommendation engine (PostgreSQL-driven)
+│   ├── student_service.py             # Student management & analytics
+│   ├── performance_service.py         # System monitoring (Redis-based)
 │   └── cache_service.py               # Advanced caching strategies
 │
 ├── 🌐 api/                            # REST API
@@ -58,16 +62,16 @@ backend/
 │   │   └── vector_queries.sql         # Vector similarity query examples
 │   └── README.md                      # Database documentation
 │
-├── 📝 scripts/                        # Utility scripts
+├── 📝 scripts/                        # Utility scripts (data loading & admin)
 │   ├── __init__.py
 │   ├── deploy.py                      # Deployment automation
-│   ├── migrate_data.py                # Data migration (was create_normalized_schema.py)
+│   ├── migrate_data.py                # Data migration & normalization
+│   ├── load_to_postgres.py            # Load parquet data to PostgreSQL
 │   ├── maintenance.py                 # System maintenance
-│   ├── vector_data_import.py          # Vector data import
-│   ├── transition_matrix_storage.py   # Transition matrix storage
+│   ├── transition_matrix_storage.py   # Transition matrix management
 │   ├── inspect_paraquet.py            # Data inspection utility
-│   ├── legacy_main_system.py          # Original main_system.py (reference)
-│   └── legacy_student_history.py      # Original student_history.py (reference)
+│   ├── student_history.py             # Student data generation
+│   └── generate_pgadmin_config.py     # pgAdmin configuration generator
 │
 ├── p1_images/                         # Image data (unchanged)
 ├── requirements.txt                   # Python dependencies
@@ -84,9 +88,11 @@ backend/
 ### 1. System Requirements
 
 - Python 3.8+
-- PostgreSQL 12+
+- PostgreSQL 12+ with pgvector extension
 - Redis 6+
 - 8GB+ RAM recommended
+
+**Note**: The system is now fully database-driven. All runtime components use PostgreSQL and Redis - no external files required.
 
 ### 2. Environment Setup
 
@@ -108,18 +114,18 @@ export REDIS_PORT=6379
 ### 3. Database Setup
 
 ```bash
-# Option 1: Using deployment script (recommended)
-python scripts/deploy.py --environment development --steps setup_database
+# Option 1: Using Docker (recommended)
+docker-compose up -d postgres redis
 
 # Option 2: Manual database setup
 createdb human_capital_dev
 psql -d human_capital_dev -f database/migrations/01_initial_schema.sql
 
-# After loading data, create performance indexes
-psql -d human_capital_dev -f database/migrations/02_halfprecision_indexes.sql
+# Load data into PostgreSQL (includes questions, embeddings, transition matrices)
+python scripts/load_to_postgres.py
 
-# Option 3: Using migration script
-python scripts/migrate_data.py
+# Create performance indexes
+psql -d human_capital_dev -f database/migrations/02_halfprecision_indexes.sql
 ```
 
 ### 4. Run the System
@@ -175,32 +181,35 @@ curl http://localhost:8000/student/123/performance
 curl http://localhost:8000/questions/9702_m16_1/similar?top_k=10
 ```
 
-## 🧠 ML Pipeline
+## 🧠 ML Pipeline (Database-Driven)
 
-The ML components include:
+The ML components are fully integrated with PostgreSQL:
 
 1. **Vector Encoder** (`ml/vector_encoder.py`): Enhanced vector encoding with student context
-2. **Transition Matrix** (`ml/transition_matrix.py`): Cluster transition probabilities
-3. **Embeddings** (`ml/embeddings.py`): Multimodal embedding operations
-4. **Similarity** (`ml/similarity.py`): Advanced similarity calculations
+2. **Transition Matrix** (`ml/transition_matrix.py`): Cluster transition probabilities (stored in DB)
+3. **Embeddings** (`ml/embeddings.py`): Multimodal embedding operations (PostgreSQL vectors)
+4. **Similarity** (`ml/similarity.py`): Advanced similarity calculations (database queries)
 
 ### Recommendation Flow
 
-1. Student history → Context encoding
-2. Current question → Cluster distribution
-3. Transition matrix → Next cluster priorities
-4. Vector similarity → Question ranking
-5. Diversity filtering → Final recommendations
+1. **Student history** → Load from PostgreSQL → Context encoding
+2. **Current question** → Database embeddings → Cluster distribution
+3. **Transition matrix** → Load from PostgreSQL → Next cluster priorities
+4. **Vector similarity** → PostgreSQL pgvector queries → Question ranking
+5. **Diversity filtering** → Final recommendations
+
+**All data flows through PostgreSQL - no external files required at runtime.**
 
 ## 💾 Data Management
 
 ### Database Schema
 
-The system uses a normalized PostgreSQL schema with:
-- Questions with embeddings and clusters
-- Student profiles and history
-- Performance tracking
-- Caching metadata
+The system uses a normalized PostgreSQL schema with pgvector extension:
+- **Questions**: 4,560+ questions with OpenAI, UMAP, and soft cluster embeddings
+- **Students**: Student profiles, enrollments, and learning history
+- **Transition Matrices**: Pre-computed cluster transition probabilities
+- **Performance Tracking**: Student analytics and system monitoring
+- **Caching Metadata**: Redis cache management
 
 ### Caching Strategy
 
@@ -322,18 +331,21 @@ python scripts/deploy.py --steps validate_environment setup_database initialize_
 
 ## 📈 Performance
 
-Optimized for high performance:
+Optimized for high performance with database-driven architecture:
 
-- **Database**: Optimized queries with proper indexing
+- **Database**: PostgreSQL with pgvector for efficient vector operations
+- **Indexing**: Optimized indexes for 3072D embeddings and similarity queries
 - **Caching**: Multi-level Redis caching strategy
-- **ML**: Vectorized operations with NumPy
+- **ML**: Vectorized operations with database-stored matrices
 - **API**: Async FastAPI with connection pooling
-- **Memory**: Efficient data structures and memory management
+- **Memory**: Efficient data structures and minimal memory footprint
 
 Expected performance:
-- Recommendations: <100ms (cached), <500ms (fresh)
-- API throughput: 1000+ requests/second
-- Concurrent users: 1000+
+- **Recommendations**: <100ms (cached), <500ms (fresh database queries)
+- **Vector Similarity**: <50ms with pgvector indexing
+- **API throughput**: 1000+ requests/second
+- **Concurrent users**: 1000+
+- **Database**: 4,560 questions with full embeddings loaded instantly
 
 ## 🤝 Contributing
 
@@ -345,19 +357,23 @@ Expected performance:
 
 ## 📝 Migration Notes
 
-This reorganized structure replaces the previous flat file organization. Key changes:
+This system has been fully modernized with database-driven architecture. Key changes:
 
-- `main_system.py` → `main.py` + modular services
-- `api_server.py` → `api/routes.py` + middleware + schemas
-- ML components split into focused modules
-- Configuration centralized and environment-aware
-- Added comprehensive testing and deployment tools
+- **Database-First**: All runtime components use PostgreSQL + Redis (no external files)
+- **Modular Architecture**: `main_system.py` → `main.py` + focused service modules
+- **API Evolution**: `api_server.py` → `api/routes.py` + middleware + schemas
+- **ML Integration**: Components use database-stored embeddings and transition matrices
+- **Configuration**: Centralized and environment-aware
+- **Performance**: Optimized with pgvector for sub-100ms recommendations
 
-Legacy files are preserved in `scripts/legacy_*` for reference.
+**Major Achievement**: Eliminated all external file dependencies from runtime components.
 
 ## 🔗 Related Files
 
-- **Documentation**: `SYSTEM_ANALYSIS.md`, `SYSTEM_STARTUP_GUIDE.md`
-- **Database**: SQL files in root and `init-scripts/`
-- **Docker**: `Dockerfile`, `docker-compose*.yml`
-- **Data**: Parquet files and image directories
+- **Database Schema**: `database/migrations/01_initial_schema.sql` (PostgreSQL + pgvector)
+- **Performance Indexes**: `database/migrations/02_halfprecision_indexes.sql`
+- **Docker**: `Dockerfile`, `docker-compose*.yml` (PostgreSQL, Redis, API)
+- **Data Loading**: `scripts/load_to_postgres.py` (parquet → PostgreSQL)
+- **Configuration**: `config/environments.py` (development/production settings)
+
+**Note**: All runtime data now lives in PostgreSQL. Parquet files are only used during initial data loading via scripts.

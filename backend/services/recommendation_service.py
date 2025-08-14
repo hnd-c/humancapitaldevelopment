@@ -5,9 +5,9 @@ Integrates enriched vectors + transition matrix to recommend specific questions
 
 import numpy as np
 import pandas as pd
-from enriched_vector import RichVectorEncoder, load_student_history_normalized, create_question_mapping_from_normalized
-from transition_matrix import _build_cooccurrence_transitions, recommend_next_clusters
-from database_manager import DatabaseManager
+from ml.vector_encoder import RichVectorEncoder, load_student_history_normalized, create_question_mapping_from_normalized
+from ml.transition_matrix import _build_cooccurrence_transitions, recommend_next_clusters
+from data.database_manager import DatabaseManager
 import json
 from psycopg2.extras import RealDictCursor
 
@@ -18,24 +18,26 @@ class OptimizedRecommendationEngine:
         print("🚀 Initializing Recommendation Engine...")
 
         self.db = db_manager
-        self.transition_matrix = self._load_or_build_transition_matrix()
 
-        # Load question data and clusters from combined_questions.parquet
+        # Load question data and clusters from PostgreSQL database first
         try:
-            self.questions_df = pd.read_parquet("combined_questions.parquet")
-            self.soft_clusters = np.stack(self.questions_df['soft_cluster'].values)
-            print(f"✅ Loaded {len(self.questions_df)} questions with {self.soft_clusters.shape[1]} clusters")
+            self.questions_df = self._load_questions_from_database()
+            if not self.questions_df.empty:
+                self.soft_clusters = np.stack(self.questions_df['soft_cluster'].values)
+                print(f"✅ Loaded {len(self.questions_df)} questions with {self.soft_clusters.shape[1]} clusters from database")
 
-            # Create question mapping for string IDs
-            self.question_mapping = self._create_question_mapping()
+                # Create question mapping for string IDs
+                self.question_mapping = self._create_question_mapping()
+            else:
+                print("❌ No questions found in database!")
+                raise ValueError("No questions available in database")
 
-        except FileNotFoundError:
-            print("❌ combined_questions.parquet not found!")
-            print("💡 Make sure the clustering data is available")
-            raise
         except Exception as e:
-            print(f"❌ Error loading question data: {e}")
+            print(f"❌ Error loading question data from database: {e}")
             raise
+
+        # Now load or build transition matrix (after questions_df is available)
+        self.transition_matrix = self._load_or_build_transition_matrix()
 
         # Initialize components
         self.encoder = RichVectorEncoder(self.soft_clusters, self.question_mapping)
@@ -65,46 +67,244 @@ class OptimizedRecommendationEngine:
         print(f"📋 Created mapping for {len(question_mapping)} questions")
         return question_mapping
 
-    def _load_or_build_transition_matrix(self):
-        """Load transition matrix using hybrid storage strategy"""
+    def _load_questions_from_database(self):
+        """Load question data with embeddings from PostgreSQL database"""
         try:
-            # Import the storage manager
-            from transition_matrix_storage import TransitionMatrixManager
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(cursor_factory=self.db.RealDictCursor)
 
-            # Get Redis client for vectors (port 6380)
-            import redis
-            redis_client = redis.Redis(
-                host=self.db.redis_config.get('host', 'localhost'),
-                port=6380,  # Use vector Redis instance
-                db=0
-            )
+                # Query to get questions with all their embeddings and metadata
+                query = """
+                SELECT
+                    internal_question_id,
+                    question_id,
+                    paper_id,
+                    question_number,
+                    openai_embedding,
+                    umap_embedding,
+                    soft_cluster,
+                    combined_text,
+                    embedding_model,
+                    embedding_created_at,
+                    created_at
+                FROM questions
+                WHERE soft_cluster IS NOT NULL
+                ORDER BY internal_question_id
+                """
 
-            # Initialize storage manager
-            storage_manager = TransitionMatrixManager(redis_client, self.db.db_config)
+                cursor.execute(query)
+                results = cursor.fetchall()
 
-            # Get matrix using hybrid strategy
-            matrix = storage_manager.get_or_compute_matrix(force_rebuild=False)
+                if not results:
+                    print("⚠️  No questions with embeddings found in database")
+                    return pd.DataFrame()
+
+                # Convert to DataFrame
+                df = pd.DataFrame(results)
+
+                # Convert vector strings to numpy arrays
+                def parse_vector(vector_str):
+                    if isinstance(vector_str, str):
+                        # Parse string like '[0,0,0,1,0,...]' to numpy array
+                        import ast
+                        try:
+                            return np.array(ast.literal_eval(vector_str), dtype=np.float32)
+                        except:
+                            return None
+                    return vector_str
+
+                # Apply vector conversion to embedding columns
+                if 'soft_cluster' in df.columns:
+                    df['soft_cluster'] = df['soft_cluster'].apply(parse_vector)
+
+                if 'openai_embedding' in df.columns:
+                    df['openai_embedding'] = df['openai_embedding'].apply(parse_vector)
+
+                if 'umap_embedding' in df.columns:
+                    df['umap_embedding'] = df['umap_embedding'].apply(parse_vector)
+
+                # Extract paper_number from question_id
+                # Assuming question_id format is like "9702_m16_qp_12_1"
+                df['paper_number'] = df['question_id'].str.extract(r'(\d+_[a-z]\d+_qp_\d+)')
+
+                # question_number is already a separate column in the database
+                # Ensure it's treated as string for consistency with existing code
+                df['question_number'] = df['question_number'].astype(str)
+
+                print(f"✅ Loaded {len(df)} questions from PostgreSQL database")
+                return df
+
+        except Exception as e:
+            print(f"❌ Error loading questions from database: {e}")
+            return pd.DataFrame()
+
+    def _load_or_build_transition_matrix(self):
+        """Load transition matrix from PostgreSQL database"""
+        try:
+            # First try to load from database
+            matrix = self._load_transition_matrix_from_database()
+            if matrix is not None:
+                return matrix
+
+            # If no matrix in database, build one from the question data
+            print("🔄 No transition matrix in database, building from data...")
+            matrix = self._build_transition_matrix_from_database(alpha=0.1, normalize=True)
 
             if matrix is not None:
-                print(f"✅ Loaded transition matrix from storage ({matrix.shape})")
-                return matrix
-            else:
-                print("❌ Failed to load transition matrix from any source")
-                return None
+                # Optionally save the built matrix back to database
+                self._save_transition_matrix_to_database(matrix)
+
+            return matrix
 
         except Exception as e:
             print(f"❌ Error in transition matrix loading: {e}")
-            print("🔄 Falling back to direct computation...")
+            return None
 
-            # Fallback to direct computation
-            try:
-                from transition_matrix import _build_cooccurrence_transitions
-                matrix = _build_cooccurrence_transitions(alpha=0.1, normalize=True)
-                print(f"✅ Built transition matrix directly ({matrix.shape if matrix is not None else 'failed'})")
-                return matrix
-            except Exception as fallback_error:
-                print(f"❌ Fallback computation also failed: {fallback_error}")
+    def _load_transition_matrix_from_database(self):
+        """Load transition matrix from PostgreSQL database"""
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(cursor_factory=self.db.RealDictCursor)
+
+                # Get the most recent active transition matrix
+                cursor.execute("""
+                    SELECT matrix_data, metadata
+                    FROM transition_matrices
+                    WHERE is_active = true
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """)
+
+                result = cursor.fetchone()
+
+                if result:
+                    matrix_data = result['matrix_data']
+                    metadata = result['metadata']
+
+                    # Reconstruct the numpy matrix
+                    import numpy as np
+                    matrix = np.array(matrix_data['matrix'])
+
+                    print(f"✅ Loaded transition matrix from database: {matrix.shape}")
+                    print(f"   📊 Algorithm: {metadata['algorithm']}")
+                    print(f"   📊 N clusters: {metadata['n_clusters']}")
+
+                    return matrix
+                else:
+                    print("⚠️  No active transition matrix found in database")
+                    return None
+
+        except Exception as e:
+            print(f"❌ Error loading transition matrix from database: {e}")
+            return None
+
+    def _save_transition_matrix_to_database(self, matrix):
+        """Save a transition matrix to the PostgreSQL database"""
+        try:
+            import json
+            import hashlib
+            import numpy as np
+
+            # Create matrix data structure
+            matrix_data = {
+                'shape': list(matrix.shape),
+                'dtype': str(matrix.dtype),
+                'matrix': matrix.tolist()
+            }
+
+            # Create metadata
+            metadata = {
+                'algorithm': 'cooccurrence_transitions',
+                'n_clusters': matrix.shape[0],
+                'parameters': {'alpha': 0.1, 'normalized': True},
+                'source': 'database_questions'
+            }
+
+            # Create hash for the matrix
+            matrix_str = json.dumps(matrix_data, sort_keys=True)
+            source_hash = hashlib.md5(matrix_str.encode()).hexdigest()
+
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor()
+
+                # Insert the new matrix
+                cursor.execute("""
+                    INSERT INTO transition_matrices
+                    (source_data_hash, matrix_data, metadata, algorithm_name, algorithm_version, is_active)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (
+                    source_hash,
+                    json.dumps(matrix_data),
+                    json.dumps(metadata),
+                    'cooccurrence_transitions',
+                    '1.0',
+                    True
+                ))
+
+                conn.commit()
+                print("✅ Saved transition matrix to database")
+
+        except Exception as e:
+            print(f"❌ Error saving transition matrix to database: {e}")
+
+    def _build_transition_matrix_from_database(self, alpha=0.1, normalize=True):
+        """Build transition matrix using soft cluster data from database"""
+        try:
+            # Get soft clusters from the already loaded questions_df
+            if not hasattr(self, 'questions_df') or self.questions_df.empty:
+                print("❌ No questions data available for transition matrix building")
                 return None
+
+            soft_clusters = np.stack(self.questions_df['soft_cluster'].values)
+            n_clusters = soft_clusters.shape[1]
+            n_questions = soft_clusters.shape[0]
+
+            print(f"🔄 Building transition matrix from {n_questions} questions with {n_clusters} clusters")
+
+            # Initialize transition matrix
+            T = np.zeros((n_clusters, n_clusters))
+
+            # Build co-occurrence transitions
+            for question_idx in range(n_questions):
+                clusters = soft_clusters[question_idx]
+
+                # Get significant clusters (above threshold)
+                significant_clusters = np.where(clusters > 0.1)[0]
+
+                # Add transitions between significant clusters
+                for i in significant_clusters:
+                    for j in significant_clusters:
+                        if i != j:
+                            # Weight by product of cluster memberships
+                            weight = clusters[i] * clusters[j]
+                            T[i, j] += weight
+
+            # Add self-loops with alpha
+            for i in range(n_clusters):
+                T[i, i] += alpha
+
+            # Normalize if requested
+            if normalize:
+                T = self._normalize_transition_matrix(T)
+
+            print(f"✅ Built transition matrix with shape {T.shape}")
+            return T
+
+        except Exception as e:
+            print(f"❌ Error building transition matrix from database: {e}")
+            return None
+
+    def _normalize_transition_matrix(self, T):
+        """Normalize each row to sum to 1 (valid probability distribution)"""
+        T_normalized = T.copy()
+        for i in range(T.shape[0]):
+            row_sum = T_normalized[i].sum()
+            if row_sum > 0:
+                T_normalized[i] /= row_sum
+            else:
+                # If no transitions from cluster i, uniform distribution
+                T_normalized[i] = np.ones(T.shape[1]) / T.shape[1]
+        return T_normalized
 
     def recommend_questions_optimized(self, student_id, objective='balanced', top_k=5):
         """Database-optimized recommendations with caching"""
