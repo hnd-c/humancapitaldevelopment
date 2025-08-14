@@ -181,28 +181,28 @@ class SimilarityCalculator:
             return None
 
     def _calculate_multimodal_similarity(self, embeddings1: Dict, embeddings2: Dict) -> float:
-        """Helper method for multimodal similarity calculation"""
+        """Helper method for multimodal similarity calculation - matches PostgreSQL function"""
         try:
             similarities = []
             weights = []
 
-            # OpenAI embedding similarity
+            # OpenAI embedding similarity (normalized euclidean - matches PostgreSQL)
             if embeddings1.get('openai_embedding') and embeddings2.get('openai_embedding'):
                 emb1 = np.array(embeddings1['openai_embedding'])
                 emb2 = np.array(embeddings2['openai_embedding'])
-                sim = self.calculate_cosine_similarity(emb1, emb2)
+                sim = self.calculate_euclidean_similarity(emb1, emb2)
                 similarities.append(sim)
                 weights.append(0.6)
 
-            # UMAP embedding similarity
+            # UMAP embedding similarity (normalized euclidean - matches PostgreSQL)
             if embeddings1.get('umap_embedding') and embeddings2.get('umap_embedding'):
                 emb1 = np.array(embeddings1['umap_embedding'])
                 emb2 = np.array(embeddings2['umap_embedding'])
-                sim = self.calculate_cosine_similarity(emb1, emb2)
+                sim = self.calculate_euclidean_similarity(emb1, emb2)
                 similarities.append(sim)
                 weights.append(0.2)
 
-            # Cluster similarity
+            # Cluster similarity (cosine similarity - matches PostgreSQL)
             if embeddings1.get('soft_cluster') and embeddings2.get('soft_cluster'):
                 cluster1 = np.array(embeddings1['soft_cluster'])
                 cluster2 = np.array(embeddings2['soft_cluster'])

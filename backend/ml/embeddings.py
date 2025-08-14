@@ -84,6 +84,7 @@ class EmbeddingManager:
                                         umap_embedding: Optional[List[float]] = None,
                                         cluster_vector: Optional[List[float]] = None,
                                         weights: Tuple[float, float, float] = (0.6, 0.2, 0.2),
+                                        similarity_threshold: float = 0.6,
                                         top_k: int = 10) -> List[Dict[str, Any]]:
         """Multi-modal similarity using PostgreSQL functions"""
         try:
@@ -93,11 +94,11 @@ class EmbeddingManager:
                 # Use the PostgreSQL function for multimodal similarity
                 cursor.execute("""
                     SELECT * FROM find_similar_questions_multimodal(
-                        %s, %s, %s, %s, %s, %s, 0.6, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s
                     )
                 """, (
                     openai_embedding, umap_embedding, cluster_vector,
-                    weights[0], weights[1], weights[2], top_k
+                    weights[0], weights[1], weights[2], similarity_threshold, top_k
                 ))
 
                 return cursor.fetchall()

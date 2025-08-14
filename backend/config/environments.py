@@ -11,7 +11,7 @@ This module handles:
 
 import os
 from typing import Dict, Any, Optional
-from .settings import SystemConfig, DatabaseConfig, RedisConfig, PerformanceConfig, SecurityConfig
+from .settings import SystemConfig, DatabaseConfig, RedisConfig, MLConfig, CacheConfig, PerformanceConfig, SecurityConfig
 
 
 class DevelopmentConfig(SystemConfig):
@@ -24,7 +24,7 @@ class DevelopmentConfig(SystemConfig):
                 port=5432,
                 database="human_capital_dev",
                 user="hcd_user",
-                password="dev_password",
+                password="your_secure_password_here",
                 connection_pool_size=5,
                 max_overflow=10
             ),
@@ -34,8 +34,8 @@ class DevelopmentConfig(SystemConfig):
                 db=0,
                 max_connections=10
             ),
-            ml=super().ml,
-            cache=super().cache,
+            ml=MLConfig(),
+            cache=CacheConfig(),
             performance=PerformanceConfig(
                 enable_monitoring=True,
                 enable_detailed_logging=True,
@@ -76,8 +76,8 @@ class StagingConfig(SystemConfig):
                 password=os.getenv("STAGING_REDIS_PASSWORD"),
                 max_connections=25
             ),
-            ml=super().ml,
-            cache=super().cache,
+            ml=MLConfig(),
+            cache=CacheConfig(),
             performance=PerformanceConfig(
                 enable_monitoring=True,
                 enable_detailed_logging=False,
@@ -126,8 +126,8 @@ class ProductionConfig(SystemConfig):
                 socket_timeout=30,
                 socket_connect_timeout=30
             ),
-            ml=super().ml,
-            cache=super().cache,
+            ml=MLConfig(),
+            cache=CacheConfig(),
             performance=PerformanceConfig(
                 enable_monitoring=True,
                 enable_detailed_logging=False,
@@ -204,8 +204,8 @@ class TestConfig(SystemConfig):
                 db=1,  # Different DB for tests
                 max_connections=5
             ),
-            ml=super().ml,
-            cache=super().cache,
+            ml=MLConfig(),
+            cache=CacheConfig(),
             performance=PerformanceConfig(
                 enable_monitoring=False,
                 enable_detailed_logging=False,

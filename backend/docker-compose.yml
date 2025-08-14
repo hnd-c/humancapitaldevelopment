@@ -15,7 +15,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/migrations/01_initial_schema.sql:/docker-entrypoint-initdb.d/01-migration.sql
-      - ./database/migrations/02_halfprecision_indexes.sql:/docker-entrypoint-initdb.d/02-indexes.sql
+      # - ./database/migrations/02_halfprecision_indexes.sql:/docker-entrypoint-initdb.d/02-indexes.sql
       - ./postgres-config:/etc/postgresql
     # Development-optimized PostgreSQL configuration
     command: >
