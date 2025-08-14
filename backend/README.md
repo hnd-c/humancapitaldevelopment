@@ -126,8 +126,6 @@ psql -d human_capital_dev -f database/migrations/01_initial_schema.sql
 # Load data into PostgreSQL (includes questions, embeddings, transition matrices)
 python scripts/load_to_postgres.py
 
-# Create performance indexes
-psql -d human_capital_dev -f database/migrations/02_halfprecision_indexes.sql
 ```
 
 ### 4. Run the System
