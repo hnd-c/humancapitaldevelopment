@@ -22,7 +22,7 @@ def _build_cooccurrence_transitions(alpha=0.1, normalize=True):
     """
     try:
         # Load from combined_questions.parquet (based on enriched_vector.py pattern)
-        df = pd.read_parquet("combined_questions.parquet")
+        df = pd.read_parquet("../combined_questions.parquet")
         soft_clusters = np.stack(df['soft_cluster'].values)  # Convert to numpy array
         n_clusters = soft_clusters.shape[1]
         n_questions = soft_clusters.shape[0]

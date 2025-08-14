@@ -14,8 +14,8 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgresql_migration.sql:/docker-entrypoint-initdb.d/01-migration.sql
-      - ./init-scripts:/docker-entrypoint-initdb.d
+      - ./database/migrations/01_initial_schema.sql:/docker-entrypoint-initdb.d/01-migration.sql
+      - ./database/migrations/02_halfprecision_indexes.sql:/docker-entrypoint-initdb.d/02-indexes.sql
       - ./postgres-config:/etc/postgresql
     # Development-optimized PostgreSQL configuration
     command: >
@@ -191,7 +191,7 @@ services:
       - "5050:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
-      - ./pgadmin/servers.json:/pgadmin4/servers.json  # Pre-configure server connections
+      - ./config/pgadmin_servers.json:/pgadmin4/servers.json  # Pre-configure server connections
     networks:
       - hcd-network
     depends_on:

@@ -15,8 +15,8 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgresql_migration.sql:/docker-entrypoint-initdb.d/01-migration.sql
-      - ./init-scripts:/docker-entrypoint-initdb.d
+      - ./database/migrations/01_initial_schema.sql:/docker-entrypoint-initdb.d/01-migration.sql
+      - ./database/migrations/02_halfprecision_indexes.sql:/docker-entrypoint-initdb.d/02-indexes.sql
       - ./postgres-config:/etc/postgresql
     # Production-optimized PostgreSQL configuration
     command: >
@@ -178,7 +178,7 @@ services:
       REDIS_PORT: 6379
       APP_ENV: production
       WORKER_MODE: true
-    command: ["python", "worker.py"]
+    command: ["python", "scripts/worker.py"]
     volumes:
       - ./data:/app/data:ro
       - hcd_logs:/app/logs
@@ -271,7 +271,7 @@ services:
       - "5050:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
-      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - ./config/pgadmin_servers.json:/pgadmin4/servers.json:ro
     networks:
       - hcd-network
     depends_on:
