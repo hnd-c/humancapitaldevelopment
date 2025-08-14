@@ -12,9 +12,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 import uvicorn
+import base64
 
 # Import our system components
 from main import HumanCapitalDevelopmentSystem
@@ -398,6 +399,287 @@ async def general_exception_handler(request, exc):
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application"""
     return app
+
+
+# =====================================================
+# QUESTION RENDERING ENDPOINTS
+# =====================================================
+
+@app.get("/questions/{question_id}/render", summary="Render question with images")
+async def render_question_image(
+    question_id: str,
+    width: int = Query(12, description="Image width"),
+    height: int = Query(16, description="Image height"),
+    format: str = Query("PNG", description="Image format (PNG/JPEG)")
+):
+    """
+    Render a question with its images as a visual layout
+    Returns the rendered image as bytes
+    """
+    if not system:
+        raise HTTPException(status_code=503, detail="System not initialized")
+
+    try:
+        # Import here to avoid circular imports
+        from services.question_rendering_service import QuestionRenderingService
+
+        # Initialize rendering service
+        renderer = QuestionRenderingService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        # Get question data
+        question_data = renderer.get_question_by_id(question_id)
+        if not question_data:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        # Render question to bytes
+        img_bytes = renderer.render_question_to_bytes(
+            question_data,
+            figsize=(width, height),
+            format=format.upper()
+        )
+
+        if not img_bytes:
+            raise HTTPException(status_code=500, detail="Failed to render question")
+
+        # Return image
+        media_type = f"image/{format.lower()}"
+        return Response(content=img_bytes, media_type=media_type)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error rendering question: {str(e)}")
+
+
+@app.get("/questions/{question_id}/render/base64", summary="Render question as base64")
+async def render_question_base64(
+    question_id: str,
+    width: int = Query(12, description="Image width"),
+    height: int = Query(16, description="Image height")
+):
+    """
+    Render a question and return as base64 encoded image
+    Useful for embedding in web pages
+    """
+    if not system:
+        raise HTTPException(status_code=503, detail="System not initialized")
+
+    try:
+        from services.question_rendering_service import QuestionRenderingService
+
+        renderer = QuestionRenderingService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        question_data = renderer.get_question_by_id(question_id)
+        if not question_data:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        base64_image = renderer.render_question_to_base64(
+            question_data,
+            figsize=(width, height)
+        )
+
+        if not base64_image:
+            raise HTTPException(status_code=500, detail="Failed to render question")
+
+        return {
+            "question_id": question_id,
+            "image_base64": base64_image,
+            "format": "PNG",
+            "size": {"width": width, "height": height}
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error rendering question: {str(e)}")
+
+
+@app.get("/questions/{question_id}/summary", summary="Get question summary")
+async def get_question_summary(question_id: str):
+    """
+    Get question summary including metadata and text preview
+    """
+    if not system:
+        raise HTTPException(status_code=503, detail="System not initialized")
+
+    try:
+        from services.question_rendering_service import QuestionRenderingService
+
+        renderer = QuestionRenderingService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        question_data = renderer.get_question_by_id(question_id)
+        if not question_data:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        summary = renderer.get_question_summary(question_data)
+        return summary
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting question summary: {str(e)}")
+
+
+@app.get("/questions/random", summary="Get random questions")
+async def get_random_questions(count: int = Query(10, description="Number of questions to return")):
+    """
+    Get random questions from the database
+    """
+    if not system:
+        raise HTTPException(status_code=503, detail="System not initialized")
+
+    try:
+        from services.question_rendering_service import QuestionRenderingService
+
+        renderer = QuestionRenderingService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        questions = renderer.get_random_questions(count)
+        summaries = [renderer.get_question_summary(q) for q in questions]
+
+        return {
+            "count": len(summaries),
+            "questions": summaries
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting random questions: {str(e)}")
+
+
+@app.get("/questions/random/render", summary="Render random questions")
+async def render_random_questions(
+    count: int = Query(5, description="Number of questions to render"),
+    width: int = Query(12, description="Image width"),
+    height: int = Query(16, description="Image height")
+):
+    """
+    Get random questions and return their rendered images as base64
+    """
+    if not system:
+        raise HTTPException(status_code=503, detail="System not initialized")
+
+    try:
+        from services.question_rendering_service import QuestionRenderingService
+
+        renderer = QuestionRenderingService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        questions = renderer.get_random_questions(count)
+
+        rendered_questions = []
+        for question_data in questions:
+            summary = renderer.get_question_summary(question_data)
+            base64_image = renderer.render_question_to_base64(
+                question_data,
+                figsize=(width, height)
+            )
+
+            rendered_questions.append({
+                "summary": summary,
+                "image_base64": base64_image
+            })
+
+        return {
+            "count": len(rendered_questions),
+            "questions": rendered_questions
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error rendering random questions: {str(e)}")
+
+
+@app.get("/papers", summary="Get available papers")
+async def get_papers():
+    """
+    Get list of available papers with question counts
+    """
+    if not system:
+        raise HTTPException(status_code=503, detail="System not initialized")
+
+    try:
+        from services.question_rendering_service import QuestionRenderingService
+
+        renderer = QuestionRenderingService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        papers = renderer.get_papers_list()
+        return {
+            "count": len(papers),
+            "papers": papers
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting papers: {str(e)}")
+
+
+@app.get("/papers/{paper_code}/questions", summary="Get questions by paper")
+async def get_questions_by_paper(paper_code: str):
+    """
+    Get all questions for a specific paper
+    """
+    if not system:
+        raise HTTPException(status_code=503, detail="System not initialized")
+
+    try:
+        from services.question_rendering_service import QuestionRenderingService
+
+        renderer = QuestionRenderingService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        questions = renderer.get_questions_by_paper(paper_code)
+        summaries = [renderer.get_question_summary(q) for q in questions]
+
+        return {
+            "paper_code": paper_code,
+            "count": len(summaries),
+            "questions": summaries
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting questions for paper {paper_code}: {str(e)}")
+
+
+@app.get("/questions/search", summary="Search questions")
+async def search_questions(
+    q: str = Query(..., description="Search query"),
+    limit: int = Query(20, description="Maximum number of results")
+):
+    """
+    Search questions by text content
+    """
+    if not system:
+        raise HTTPException(status_code=503, detail="System not initialized")
+
+    try:
+        from services.question_rendering_service import QuestionRenderingService
+
+        renderer = QuestionRenderingService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        questions = renderer.search_questions(q, limit)
+        summaries = [renderer.get_question_summary(question) for question in questions]
+
+        return {
+            "query": q,
+            "count": len(summaries),
+            "questions": summaries
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error searching questions: {str(e)}")
 
 
 if __name__ == "__main__":

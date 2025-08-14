@@ -6,6 +6,7 @@ A modern, scalable ML-powered learning recommendation system with **fully databa
 - **Database-First**: All runtime components use PostgreSQL + Redis (no external file dependencies)
 - **Vector-Powered**: 4,560+ questions with OpenAI embeddings using pgvector extension
 - **ML-Integrated**: Transition matrices and similarity calculations stored in database
+- **Visual Question Rendering**: Dynamic image composition from database + filesystem
 - **Production-Ready**: Sub-100ms recommendations with intelligent caching
 
 ## 🏗️ Architecture Overview
@@ -37,7 +38,8 @@ backend/
 │   ├── recommendation_service.py      # ML recommendation engine (PostgreSQL-driven)
 │   ├── student_service.py             # Student management & analytics
 │   ├── performance_service.py         # System monitoring (Redis-based)
-│   └── cache_service.py               # Advanced caching strategies
+│   ├── cache_service.py               # Advanced caching strategies
+│   └── question_rendering_service.py  # Question image rendering & visualization
 │
 ├── 🌐 api/                            # REST API
 │   ├── __init__.py
@@ -97,7 +99,7 @@ backend/
 ### 2. Environment Setup
 
 ```bash
-# Install dependencies
+# Install dependencies (includes matplotlib for question rendering)
 pip install -r requirements.txt
 
 # Set environment variables
@@ -163,22 +165,42 @@ Configuration is handled through:
 python main.py --mode api --port 8000
 ```
 
-### Example API Calls
+### Complete API Reference
 
 ```bash
-# Health check
-curl http://localhost:8000/health
+# System & Health
+curl http://localhost:8000/                           # Welcome message
+curl http://localhost:8000/health                     # Health check
+curl http://localhost:8000/analytics/system           # System metrics
 
-# Get recommendations
+# Recommendations
 curl -X POST http://localhost:8000/recommendations \
   -H "Content-Type: application/json" \
   -d '{"student_id": "123", "objective": "balanced", "top_k": 5}'
 
-# Student performance analysis
-curl http://localhost:8000/student/123/performance
+# Student Management
+curl http://localhost:8000/student/123/performance    # Performance analysis
+curl http://localhost:8000/student/123/history        # Learning history
 
-# Similar questions
-curl http://localhost:8000/questions/9702_m16_1/similar?top_k=10
+# Question Management
+curl http://localhost:8000/questions/9702_s04_qp_1_1  # Get specific question
+curl http://localhost:8000/questions/9702_s04_qp_1_1/summary  # Question summary
+curl http://localhost:8000/questions/9702_m16_1/similar?top_k=10  # Similar questions
+curl http://localhost:8000/questions/random?count=10  # Random questions
+curl "http://localhost:8000/questions/search?q=mathematics&limit=10"  # Search
+
+# Question Rendering
+curl http://localhost:8000/questions/9702_s04_qp_1_1/render  # Render as image
+curl http://localhost:8000/questions/9702_s04_qp_1_1/render/base64  # Base64 encoding
+curl http://localhost:8000/questions/random/render?count=3  # Render random questions
+
+# Paper Management
+curl http://localhost:8000/papers                     # List all papers
+curl http://localhost:8000/papers/P1/questions        # Questions by paper
+
+# System Administration
+curl -X POST http://localhost:8000/cache/invalidate   # Clear cache
+curl -X POST http://localhost:8000/system/migrate     # System migration
 ```
 
 ## 🧠 ML Pipeline (Database-Driven)
@@ -200,12 +222,64 @@ The ML components are fully integrated with PostgreSQL:
 
 **All data flows through PostgreSQL - no external files required at runtime.**
 
+## 🎨 Question Rendering API
+
+The system provides powerful question visualization capabilities:
+
+### Rendering Features
+
+- **Dynamic Image Composition**: Combines multiple question images into single layouts
+- **Database-Driven**: Loads image paths from PostgreSQL, images from filesystem
+- **Multiple Formats**: PNG, JPEG, and Base64 encoding for web display
+- **Configurable Layout**: Adjustable dimensions and vertical arrangement
+- **Text Integration**: Question text, metadata, and paper information overlay
+
+### Question Rendering Endpoints
+
+```bash
+# Render question as image
+GET /questions/{question_id}/render?width=12&height=16&format=PNG
+
+# Get base64 encoded image (for web embedding)
+GET /questions/{question_id}/render/base64
+
+# Get question summary and metadata
+GET /questions/{question_id}/summary
+
+# Random question rendering
+GET /questions/random/render?count=5&width=12&height=16
+
+# Browse questions
+GET /questions/random?count=10
+GET /papers
+GET /papers/{paper_code}/questions
+GET /questions/search?q=text&limit=20
+```
+
+### Visual Layout
+
+Questions are rendered with:
+- **Vertical image arrangement** (top to bottom)
+- **Individual image titles** with file names
+- **Question metadata** (paper code, question number, ID)
+- **Text content** with preview (truncated if long)
+- **Professional styling** with consistent formatting
+
+### Technical Implementation
+
+```
+📡 API Request → 🗄️ PostgreSQL (image paths) → 📁 p1_images/ (actual files) → 🎨 matplotlib (composition) → 📤 PNG/JPEG response
+```
+
+**Performance**: Sub-second rendering for questions with multiple images
+
 ## 💾 Data Management
 
 ### Database Schema
 
 The system uses a normalized PostgreSQL schema with pgvector extension:
 - **Questions**: 4,560+ questions with OpenAI, UMAP, and soft cluster embeddings
+- **Images**: JSONB arrays of file paths pointing to `p1_images/` folder
 - **Students**: Student profiles, enrollments, and learning history
 - **Transition Matrices**: Pre-computed cluster transition probabilities
 - **Performance Tracking**: Student analytics and system monitoring
@@ -218,6 +292,7 @@ Multi-level caching with Redis:
 - L2: Student profiles (15 min TTL)
 - L3: Question similarities (1 hour TTL)
 - L4: Embeddings (2 hours TTL)
+- L5: Rendered question images (1 hour TTL)
 
 ## 🔧 Maintenance
 
@@ -343,6 +418,7 @@ Optimized for high performance with database-driven architecture:
 Expected performance:
 - **Recommendations**: <100ms (cached), <500ms (fresh database queries)
 - **Vector Similarity**: <50ms with pgvector indexing
+- **Question Rendering**: <1s for multi-image compositions
 - **API throughput**: 1000+ requests/second
 - **Concurrent users**: 1000+
 - **Database**: 4,560 questions with full embeddings loaded instantly
@@ -376,4 +452,4 @@ This system has been fully modernized with database-driven architecture. Key cha
 - **Data Loading**: `scripts/load_to_postgres.py` (parquet → PostgreSQL)
 - **Configuration**: `config/environments.py` (development/production settings)
 
-**Note**: All runtime data now lives in PostgreSQL. Parquet files are only used during initial data loading via scripts.
+**Note**: All runtime data now lives in PostgreSQL. Parquet files are only used during initial data loading via scripts. Question images are stored in `p1_images/` and referenced via database paths.

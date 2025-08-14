@@ -12,5 +12,6 @@ from .recommendation_service import *
 from .student_service import *
 from .performance_service import *
 from .cache_service import *
+from .question_rendering_service import *
 
 __version__ = "1.0.0"
