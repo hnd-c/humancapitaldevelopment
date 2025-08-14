@@ -53,7 +53,7 @@ class SystemInitializer:
             )
 
             # Cache manager
-            self.cache_manager = CacheService(self.db_manager.redis_client)
+            self.cache_manager = CacheService(self.db_manager.redis_client, self.db_manager)
 
             # Test connections
             with self.db_manager.get_db_connection() as conn:

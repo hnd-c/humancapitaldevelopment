@@ -29,6 +29,32 @@ class CacheService:
             'deletes': 0
         }
 
+    def get_cached_recommendations(self, student_id: str, objective: str) -> Optional[Any]:
+        """Get cached recommendations for a student and objective"""
+        try:
+            cache_key = f"recommendations:{student_id}:{objective}"
+            cached_value = self.redis.get(cache_key)
+            if cached_value:
+                self.cache_stats['hits'] += 1
+                return json.loads(cached_value)
+
+            self.cache_stats['misses'] += 1
+            return None
+        except Exception as e:
+            print(f"Error getting cached recommendations: {e}")
+            return None
+
+    def cache_recommendations(self, student_id: str, objective: str, recommendations: Any, ttl: int = 1800) -> bool:
+        """Cache recommendations for a student and objective"""
+        try:
+            cache_key = f"recommendations:{student_id}:{objective}"
+            self.redis.setex(cache_key, ttl, json.dumps(recommendations, default=str))
+            self.cache_stats['sets'] += 1
+            return True
+        except Exception as e:
+            print(f"Error caching recommendations: {e}")
+            return False
+
     def get_or_compute(self, cache_key: str, compute_function, ttl: int = 3600, *args, **kwargs) -> Any:
         """Get from cache or compute and cache the result"""
         try:

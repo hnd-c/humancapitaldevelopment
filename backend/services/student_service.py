@@ -118,17 +118,24 @@ class StudentService:
             if not history:
                 return {"error": "No history found"}
 
+            # Calculate success rate
+            correct_attempts = sum(1 for h in history if h.get('is_correct', False))
+            overall_success_rate = correct_attempts / len(history) if history else 0.0
+
             analysis = {
-                'student_id': student_id,
+                'student_id': str(student_id),  # Convert to string for schema
                 'total_attempts': len(history),
-                'analysis_timestamp': datetime.now().isoformat()
+                'overall_success_rate': overall_success_rate,
+                'analysis_timestamp': datetime.now().timestamp(),  # Use timestamp float
+                'recent_activity': history[-10:] if history else []  # Last 10 activities
             }
 
             # Time-based patterns
             analysis['time_patterns'] = self._analyze_time_patterns(history)
 
-            # Cluster performance
-            analysis['cluster_performance'] = self._analyze_cluster_performance(history)
+            # Cluster performance - fix key types
+            cluster_perf = self._analyze_cluster_performance(history)
+            analysis['cluster_performance'] = {str(k): v for k, v in cluster_perf.items()}
 
             # Learning progression
             analysis['learning_progression'] = self._analyze_learning_progression(history)

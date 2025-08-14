@@ -168,6 +168,11 @@ async def get_recommendations(
                     top_k=request.top_k,
                     use_cache=True
                 )
+                # Cache the computed recommendations
+                if recommendations:
+                    system.cache_manager.cache_recommendations(
+                        request.student_id, request.objective, recommendations
+                    )
         else:
             recommendations = system.get_recommendations_optimized(
                 student_id=request.student_id,
@@ -244,6 +249,39 @@ async def get_student_history(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get student history: {e}")
+
+
+@app.get("/questions/random", summary="Get random questions")
+async def get_random_questions(
+    count: int = Query(10, description="Number of questions to return"),
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Get random questions from the database"""
+    try:
+        from services.question_rendering_service import QuestionRenderingService
+        renderer = QuestionRenderingService(system.db_manager, system.cache_manager)
+        questions = renderer.get_random_questions(count)
+        summaries = [renderer.get_question_summary(q) for q in questions]
+        return {"count": len(summaries), "questions": summaries}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting random questions: {str(e)}")
+
+
+@app.get("/questions/search", summary="Search questions")
+async def search_questions(
+    q: str = Query(..., description="Search query"),
+    limit: int = Query(20, description="Maximum number of results"),
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Search questions by text content"""
+    try:
+        from services.question_rendering_service import QuestionRenderingService
+        renderer = QuestionRenderingService(system.db_manager, system.cache_manager)
+        questions = renderer.search_questions(q, limit)
+        summaries = [renderer.get_question_summary(question) for question in questions]
+        return {"query": q, "count": len(summaries), "questions": summaries}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error searching questions: {str(e)}")
 
 
 @app.get("/questions/{question_id}")
@@ -410,14 +448,13 @@ async def render_question_image(
     question_id: str,
     width: int = Query(12, description="Image width"),
     height: int = Query(16, description="Image height"),
-    format: str = Query("PNG", description="Image format (PNG/JPEG)")
+    format: str = Query("PNG", description="Image format (PNG/JPEG)"),
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
 ):
     """
     Render a question with its images as a visual layout
     Returns the rendered image as bytes
     """
-    if not system:
-        raise HTTPException(status_code=503, detail="System not initialized")
 
     try:
         # Import here to avoid circular imports
@@ -456,14 +493,13 @@ async def render_question_image(
 async def render_question_base64(
     question_id: str,
     width: int = Query(12, description="Image width"),
-    height: int = Query(16, description="Image height")
+    height: int = Query(16, description="Image height"),
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
 ):
     """
     Render a question and return as base64 encoded image
     Useful for embedding in web pages
     """
-    if not system:
-        raise HTTPException(status_code=503, detail="System not initialized")
 
     try:
         from services.question_rendering_service import QuestionRenderingService
@@ -497,12 +533,13 @@ async def render_question_base64(
 
 
 @app.get("/questions/{question_id}/summary", summary="Get question summary")
-async def get_question_summary(question_id: str):
+async def get_question_summary(
+    question_id: str,
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
     """
     Get question summary including metadata and text preview
     """
-    if not system:
-        raise HTTPException(status_code=503, detail="System not initialized")
 
     try:
         from services.question_rendering_service import QuestionRenderingService
@@ -523,45 +560,17 @@ async def get_question_summary(question_id: str):
         raise HTTPException(status_code=500, detail=f"Error getting question summary: {str(e)}")
 
 
-@app.get("/questions/random", summary="Get random questions")
-async def get_random_questions(count: int = Query(10, description="Number of questions to return")):
-    """
-    Get random questions from the database
-    """
-    if not system:
-        raise HTTPException(status_code=503, detail="System not initialized")
-
-    try:
-        from services.question_rendering_service import QuestionRenderingService
-
-        renderer = QuestionRenderingService(
-            system.db_manager,
-            system.cache_manager
-        )
-
-        questions = renderer.get_random_questions(count)
-        summaries = [renderer.get_question_summary(q) for q in questions]
-
-        return {
-            "count": len(summaries),
-            "questions": summaries
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting random questions: {str(e)}")
-
 
 @app.get("/questions/random/render", summary="Render random questions")
 async def render_random_questions(
     count: int = Query(5, description="Number of questions to render"),
     width: int = Query(12, description="Image width"),
-    height: int = Query(16, description="Image height")
+    height: int = Query(16, description="Image height"),
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
 ):
     """
     Get random questions and return their rendered images as base64
     """
-    if not system:
-        raise HTTPException(status_code=503, detail="System not initialized")
 
     try:
         from services.question_rendering_service import QuestionRenderingService
@@ -596,12 +605,12 @@ async def render_random_questions(
 
 
 @app.get("/papers", summary="Get available papers")
-async def get_papers():
+async def get_papers(
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
     """
     Get list of available papers with question counts
     """
-    if not system:
-        raise HTTPException(status_code=503, detail="System not initialized")
 
     try:
         from services.question_rendering_service import QuestionRenderingService
@@ -622,12 +631,13 @@ async def get_papers():
 
 
 @app.get("/papers/{paper_code}/questions", summary="Get questions by paper")
-async def get_questions_by_paper(paper_code: str):
+async def get_questions_by_paper(
+    paper_code: str,
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
     """
     Get all questions for a specific paper
     """
-    if not system:
-        raise HTTPException(status_code=503, detail="System not initialized")
 
     try:
         from services.question_rendering_service import QuestionRenderingService
@@ -650,36 +660,6 @@ async def get_questions_by_paper(paper_code: str):
         raise HTTPException(status_code=500, detail=f"Error getting questions for paper {paper_code}: {str(e)}")
 
 
-@app.get("/questions/search", summary="Search questions")
-async def search_questions(
-    q: str = Query(..., description="Search query"),
-    limit: int = Query(20, description="Maximum number of results")
-):
-    """
-    Search questions by text content
-    """
-    if not system:
-        raise HTTPException(status_code=503, detail="System not initialized")
-
-    try:
-        from services.question_rendering_service import QuestionRenderingService
-
-        renderer = QuestionRenderingService(
-            system.db_manager,
-            system.cache_manager
-        )
-
-        questions = renderer.search_questions(q, limit)
-        summaries = [renderer.get_question_summary(question) for question in questions]
-
-        return {
-            "query": q,
-            "count": len(summaries),
-            "questions": summaries
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error searching questions: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -85,7 +85,7 @@ class QuestionRenderingService:
                     p.paper_code
                 FROM questions q
                 JOIN papers p ON q.paper_id = p.paper_id
-                WHERE q.images IS NOT NULL
+                WHERE 1=1
                 ORDER BY RANDOM()
                 LIMIT %s
                 """

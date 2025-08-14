@@ -43,8 +43,47 @@ class HumanCapitalDevelopmentSystem:
         # Initialize recommendation engine
         self._initialize_recommendation_engine()
 
+        # Initialize vector operations
+        self._initialize_vector_operations()
+
         print(f"✅ System initialized successfully in {time.time() - self.start_time:.2f}s")
         print("=" * 60)
+
+    @property
+    def db_manager(self):
+        """Access to database manager"""
+        return self.components['db_manager']
+
+    @property
+    def performance_monitor(self):
+        """Access to performance monitor"""
+        return self.components.get('performance_monitor')
+
+    @property
+    def cache_manager(self):
+        """Access to cache manager"""
+        return self.components['cache_manager']
+
+    @property
+    def vector_ops(self):
+        """Access to vector operations (if available)"""
+        return getattr(self, '_vector_ops', None)
+
+    def _extract_student_number(self, student_id):
+        """Extract numeric student ID from string or int"""
+        if isinstance(student_id, int):
+            return student_id
+        elif isinstance(student_id, str):
+            try:
+                return int(student_id)
+            except ValueError:
+                # Handle complex student IDs like "INST1_MATH_Y2_A_ALG_P1_STU_001"
+                if "_STU_" in student_id:
+                    return int(student_id.split("_STU_")[1])
+                else:
+                    raise ValueError(f"Cannot extract student number from: {student_id}")
+        else:
+            raise ValueError(f"Invalid student_id type: {type(student_id)}")
 
     def _initialize_recommendation_engine(self):
         """Initialize the recommendation engine"""
@@ -57,6 +96,16 @@ class HumanCapitalDevelopmentSystem:
             print(f"⚠️  Recommendation engine initialization failed: {e}")
             self.recommendation_engine = None
 
+    def _initialize_vector_operations(self):
+        """Initialize vector operations and embedding manager"""
+        try:
+            from ml.embeddings import EmbeddingManager
+            self._vector_ops = EmbeddingManager(self.components['db_manager'])
+            print("✅ Vector operations initialized")
+        except Exception as e:
+            print(f"⚠️  Vector operations initialization failed: {e}")
+            self._vector_ops = None
+
     def get_recommendations_optimized(self, student_id: str, objective: str = 'balanced',
                                     top_k: int = 5, use_cache: bool = True):
         """
@@ -66,11 +115,10 @@ class HumanCapitalDevelopmentSystem:
             return self._get_default_recommendations(top_k)
 
         try:
-            return self.recommendation_engine.get_recommendations_for_student(
+            return self.recommendation_engine.recommend_questions_optimized(
                 student_id=student_id,
                 objective=objective,
-                top_k=top_k,
-                use_cache=use_cache
+                top_k=top_k
             )
         except Exception as e:
             print(f"❌ Error generating recommendations for {student_id}: {e}")
