@@ -283,7 +283,10 @@ class StudentInteractionService:
             with self.db_manager.get_db_connection() as conn:
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
                 cursor.execute("""
-                    SELECT q.*, p.paper_name, p.paper_code
+                    SELECT q.internal_question_id, q.question_id, q.paper_id, q.question_number,
+                           q.images, q.text_length, q.source_file, q.ms,
+                           q.is_active, q.created_at, q.updated_at,
+                           p.paper_name, p.paper_code
                     FROM questions q
                     JOIN papers p ON q.paper_id = p.paper_id
                     WHERE q.question_id = %s

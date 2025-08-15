@@ -84,8 +84,6 @@ class StudentHistoryRecord(BaseModel):
     confidence_level: int
     device_type: str
     timestamp: datetime
-    openai_embedding: Optional[List[float]] = None
-    soft_cluster: Optional[List[float]] = None
 
 
 class StudentHistoryResponse(BaseModel):
@@ -336,9 +334,7 @@ def transform_db_history_to_schema(db_records: List[Dict[str, Any]]) -> List[Stu
             time_spent_sec=record['time_spent_sec'],
             confidence_level=record['confidence_level'],
             device_type=record['device_type'],
-            timestamp=record['timestamp'],
-            openai_embedding=record.get('openai_embedding'),
-            soft_cluster=record.get('soft_cluster')
+            timestamp=record['timestamp']
         )
         for record in db_records
     ]

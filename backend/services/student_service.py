@@ -85,7 +85,7 @@ class StudentService:
                 cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
 
                 query = """
-                SELECT sqh.*, q.question_id, q.openai_embedding, q.soft_cluster,
+                SELECT sqh.*, q.question_id,
                        p.paper_name, p.paper_code
                 FROM student_question_history sqh
                 JOIN student_paper_enrollments spe ON sqh.enrollment_id = spe.enrollment_id
@@ -336,13 +336,62 @@ class StudentService:
 
     def _analyze_cluster_performance(self, history: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Analyze performance by topic clusters"""
+        if not history:
+            return {}
+
+        # Get cluster information for the questions in this history
+        question_ids = [record.get('internal_question_id') for record in history if record.get('internal_question_id')]
+        if not question_ids:
+            return {}
+
         cluster_stats = {}
 
+        try:
+            with self.db_manager.get_db_connection() as conn:
+                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+
+                # Get cluster information for the questions
+                placeholders = ','.join(['%s'] * len(question_ids))
+                query = f"""
+                SELECT internal_question_id, soft_cluster
+                FROM questions
+                WHERE internal_question_id IN ({placeholders})
+                AND soft_cluster IS NOT NULL
+                """
+
+                cursor.execute(query, question_ids)
+                results = cursor.fetchall()
+
+                # Calculate dominant cluster in Python
+                cluster_mapping = {}
+                for row in results:
+                    question_id = row['internal_question_id']
+                    soft_cluster = row['soft_cluster']
+
+                    # Convert vector string to list and find max index
+                    try:
+                        if isinstance(soft_cluster, str):
+                            import ast
+                            cluster_probs = ast.literal_eval(soft_cluster)
+                        else:
+                            cluster_probs = soft_cluster
+
+                        # Find index of maximum probability
+                        dominant_cluster = cluster_probs.index(max(cluster_probs))
+                        cluster_mapping[question_id] = dominant_cluster
+
+                    except Exception as e:
+                        print(f"Warning: Could not parse cluster for question {question_id}: {e}")
+
+        except Exception as e:
+            print(f"Error fetching cluster information: {e}")
+            return {}
+
+        # Analyze performance by cluster
         for record in history:
-            if record.get('soft_cluster'):
-                # Get dominant cluster
-                soft_cluster = np.array(record['soft_cluster'])
-                dominant_cluster = np.argmax(soft_cluster)
+            question_id = record.get('internal_question_id')
+            if question_id and question_id in cluster_mapping:
+                dominant_cluster = cluster_mapping[question_id]
 
                 if dominant_cluster not in cluster_stats:
                     cluster_stats[dominant_cluster] = {'total': 0, 'correct': 0, 'time_sum': 0}

@@ -33,7 +33,7 @@ class DatabaseManager:
         with self.get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             query = """
-            SELECT sqh.*, q.question_id, q.openai_embedding, q.soft_cluster
+            SELECT sqh.*, q.question_id
             FROM student_question_history sqh
             JOIN student_paper_enrollments spe ON sqh.enrollment_id = spe.enrollment_id
             JOIN questions q ON sqh.internal_question_id = q.internal_question_id

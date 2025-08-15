@@ -313,7 +313,11 @@ async def get_question_details(
             cursor = conn.cursor(cursor_factory=system.db_manager.RealDictCursor)
 
             cursor.execute("""
-                SELECT q.*, p.paper_name, p.paper_code, sub.subject_name
+                SELECT q.internal_question_id, q.question_id, q.paper_id, q.question_number,
+                       q.images, q.embedding_model, q.embedding_created_at,
+                       q.cluster_model_version, q.text_length, q.source_file, q.ms,
+                       q.is_active, q.created_at, q.updated_at,
+                       p.paper_name, p.paper_code, sub.subject_name
                 FROM questions q
                 JOIN papers p ON q.paper_id = p.paper_id
                 JOIN subjects sub ON p.subject_id = sub.subject_id
