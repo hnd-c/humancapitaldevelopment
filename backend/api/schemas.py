@@ -357,3 +357,59 @@ def transform_db_recommendations_to_schema(db_records: List[Dict[str, Any]]) -> 
         )
         for record in db_records
     ]
+
+
+# Question-related schemas
+class QuestionSummaryResponse(BaseModel):
+    """Response model for question summary data"""
+    question_id: str
+    paper_code: str
+    paper_name: str
+    question_number: int
+    text_length: int
+    num_images: int
+    has_images: bool
+    text_preview: str
+    image_paths: List[str]
+
+
+class QuestionDetailsResponse(BaseModel):
+    """Response model for detailed question information"""
+    internal_question_id: int
+    question_id: str
+    paper_id: int
+    question_number: Optional[int] = None
+    images: Optional[List[str]] = None
+    embedding_model: Optional[str] = None
+    embedding_created_at: Optional[datetime] = None
+    cluster_model_version: Optional[str] = None
+    text_length: Optional[int] = None
+    source_file: Optional[str] = None
+    ms: Optional[str] = None
+    is_active: Optional[bool] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    paper_name: Optional[str] = None
+    paper_code: Optional[str] = None
+    subject_name: Optional[str] = None
+
+
+class RandomQuestionsResponse(BaseModel):
+    """Response model for random questions"""
+    count: int
+    questions: List[QuestionSummaryResponse]
+
+
+class QuestionSearchResponse(BaseModel):
+    """Response model for question search results"""
+    query: str
+    count: int
+    questions: List[QuestionSummaryResponse]
+
+
+class QuestionImageResponse(BaseModel):
+    """Response model for question image data"""
+    question_id: str
+    images: List[str]
+    has_images: bool
+    render_url: str

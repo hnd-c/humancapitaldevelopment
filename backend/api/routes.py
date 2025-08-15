@@ -6,6 +6,7 @@ Provides REST API endpoints for the ML-powered recommendation system
 
 import os
 import time
+import json
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 
@@ -21,7 +22,9 @@ from config.environments import load_config_for_environment
 from api.schemas import (
     StudentSessionRequest, StudentSessionResponse,
     QuestionAttemptRequest, QuestionAttemptResponse,
-    AnswerSubmissionRequest, AnswerSubmissionResponse
+    AnswerSubmissionRequest, AnswerSubmissionResponse,
+    RandomQuestionsResponse, QuestionSearchResponse,
+    QuestionDetailsResponse
 )
 # Import data models for consistent response handling
 from data.models import (
@@ -352,23 +355,28 @@ async def get_student_history(
         raise HTTPException(status_code=500, detail=f"Failed to get student history: {e}")
 
 
-@app.get("/questions/random", summary="Get random questions")
+@app.get("/questions/random", summary="Get random questions", response_model=RandomQuestionsResponse)
 async def get_random_questions(
     count: int = Query(10, description="Number of questions to return"),
     system: HumanCapitalDevelopmentSystem = Depends(get_system)
 ):
     """Get random questions from the database"""
     try:
+        # Validate input parameters
+        if count <= 0:
+            raise HTTPException(status_code=400, detail="Count must be positive")
+        if count > 100:
+            raise HTTPException(status_code=400, detail="Count cannot exceed 100")
         from services.question_rendering_service import QuestionRenderingService
         renderer = QuestionRenderingService(system.db_manager, system.cache_manager)
         questions = renderer.get_random_questions(count)
-        summaries = [renderer.get_question_summary(q) for q in questions]
-        return {"count": len(summaries), "questions": summaries}
+        summaries = [renderer.question_to_summary(q) for q in questions]
+        return RandomQuestionsResponse(count=len(summaries), questions=summaries)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting random questions: {str(e)}")
 
 
-@app.get("/questions/search", summary="Search questions")
+@app.get("/questions/search", summary="Search questions", response_model=QuestionSearchResponse)
 async def search_questions(
     q: str = Query(..., description="Search query"),
     limit: int = Query(20, description="Maximum number of results"),
@@ -376,59 +384,59 @@ async def search_questions(
 ):
     """Search questions by text content"""
     try:
+        # Validate search parameters
+        if not q or len(q.strip()) < 2:
+            raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")
+        if limit <= 0:
+            raise HTTPException(status_code=400, detail="Limit must be positive")
+        if limit > 200:
+            raise HTTPException(status_code=400, detail="Limit cannot exceed 200")
         from services.question_rendering_service import QuestionRenderingService
         renderer = QuestionRenderingService(system.db_manager, system.cache_manager)
         questions = renderer.search_questions(q, limit)
         summaries = [renderer.get_question_summary(question) for question in questions]
-        return {"query": q, "count": len(summaries), "questions": summaries}
+        return QuestionSearchResponse(query=q, count=len(summaries), questions=summaries)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error searching questions: {str(e)}")
 
 
-@app.get("/questions/{question_id}")
+@app.get("/questions/{question_id}", response_model=QuestionDetailsResponse)
 async def get_question_details(
     question_id: str,
     system: HumanCapitalDevelopmentSystem = Depends(get_system)
 ):
     """Get detailed information about a specific question"""
     try:
-        with system.db_manager.get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=system.db_manager.RealDictCursor)
+        # Validate question_id format
+        if not question_id or len(question_id.strip()) == 0:
+            raise HTTPException(status_code=400, detail="Question ID cannot be empty")
 
-            # Try exact match first, then try by internal_question_id if numeric
-            # Check if question_id is numeric for internal_question_id lookup
-            is_numeric = question_id.isdigit()
+        # Basic format validation for question_id
+        if not question_id.isdigit() and not question_id.startswith('9702_'):
+            raise HTTPException(status_code=400, detail="Invalid question ID format")
+        # Use the Question Rendering Service to get the question with proper Question model
+        from services.question_rendering_service import QuestionRenderingService
+        renderer = QuestionRenderingService(system.db_manager, system.cache_manager)
 
-            if is_numeric:
-                cursor.execute("""
-                    SELECT q.internal_question_id, q.question_id, q.paper_id, q.question_number,
-                           q.images, q.embedding_model, q.embedding_created_at,
-                           q.cluster_model_version, q.text_length, q.source_file, q.ms,
-                           q.is_active, q.created_at, q.updated_at,
-                           p.paper_name, p.paper_code, sub.subject_name
-                    FROM questions q
-                    JOIN papers p ON q.paper_id = p.paper_id
-                    JOIN subjects sub ON p.subject_id = sub.subject_id
-                    WHERE q.question_id = %s OR q.internal_question_id = %s
-                """, (question_id, int(question_id)))
-            else:
-                cursor.execute("""
-                    SELECT q.internal_question_id, q.question_id, q.paper_id, q.question_number,
-                           q.images, q.embedding_model, q.embedding_created_at,
-                           q.cluster_model_version, q.text_length, q.source_file, q.ms,
-                           q.is_active, q.created_at, q.updated_at,
-                           p.paper_name, p.paper_code, sub.subject_name
-                    FROM questions q
-                    JOIN papers p ON q.paper_id = p.paper_id
-                    JOIN subjects sub ON p.subject_id = sub.subject_id
-                    WHERE q.question_id = %s
-                """, (question_id,))
+        question = renderer.get_question_by_id(question_id)
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
 
-            question = cursor.fetchone()
-            if not question:
-                raise HTTPException(status_code=404, detail="Question not found")
-
-            return dict(question)
+        # Convert Question model to dictionary response with all details
+        return {
+            "internal_question_id": question.internal_question_id,
+            "question_id": question.question_id,
+            "paper_id": question.paper_id,
+            "question_number": question.question_number,
+            "question_text": question.question_text,
+            "images": question.images,
+            "text_length": question.text_length,
+            "embedding_model": question.embedding_model,
+            "created_at": question.created_at,
+            "updated_at": question.updated_at,
+            "paper_name": question.paper_name,
+            "paper_code": question.paper_code
+        }
 
     except HTTPException:
         raise
@@ -1136,14 +1144,21 @@ async def get_question_image(
             system.cache_manager
         )
 
-        question_data = renderer.get_question_by_id(question_id)
-        if not question_data:
+        question = renderer.get_question_by_id(question_id)
+        if not question:
             raise HTTPException(status_code=404, detail="Question not found")
 
-        # Check if question has images
-        images = question_data.get('images')
+        # Check if question has images (from Question model)
+        images = question.images
         if not images:
             raise HTTPException(status_code=404, detail="No images found for this question")
+
+        # Parse images if they're stored as JSON string
+        if isinstance(images, str):
+            try:
+                images = json.loads(images)
+            except (json.JSONDecodeError, TypeError):
+                raise HTTPException(status_code=404, detail="Invalid image data format")
 
         return {
             "question_id": question_id,
@@ -1175,11 +1190,11 @@ async def get_question_summary(
             system.cache_manager
         )
 
-        question_data = renderer.get_question_by_id(question_id)
-        if not question_data:
+        question = renderer.get_question_by_id(question_id)
+        if not question:
             raise HTTPException(status_code=404, detail="Question not found")
 
-        summary = renderer.get_question_summary(question_data)
+        summary = renderer.question_to_summary(question)
         return summary
 
     except Exception as e:

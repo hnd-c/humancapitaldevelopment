@@ -20,6 +20,9 @@ import time
 from typing import List, Dict, Any, Optional, Tuple
 import warnings
 
+# Import Question model and validation
+from data.models import Question, ModelValidator, ValidationError, convert_db_row_to_question
+
 warnings.filterwarnings('ignore')
 
 
@@ -35,8 +38,8 @@ class QuestionRenderingService:
             'renders': 0
         }
 
-    def get_question_by_id(self, question_id: str) -> Optional[Dict[str, Any]]:
-        """Get question data from database by question_id"""
+    def get_question_by_id(self, question_id: str) -> Optional[Question]:
+        """Get question data from database by question_id and return as Question model"""
         try:
             with self.db_manager.get_db_connection() as conn:
                 cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
@@ -47,10 +50,15 @@ class QuestionRenderingService:
                     q.question_id,
                     q.paper_id,
                     q.question_number,
-                    q.combined_text,
+                    q.combined_text AS question_text,
                     q.images,
                     q.text_length,
                     q.soft_cluster,
+                    q.openai_embedding,
+                    q.umap_embedding,
+                    q.embedding_model,
+                    q.created_at,
+                    q.updated_at,
                     p.paper_name,
                     p.paper_code
                 FROM questions q
@@ -62,15 +70,21 @@ class QuestionRenderingService:
                 result = cursor.fetchone()
 
                 if result:
-                    return dict(result)
+                    # Convert to Question model and validate
+                    question = convert_db_row_to_question(dict(result))
+                    ModelValidator.validate_question(question)
+                    return question
                 return None
 
+        except ValidationError as e:
+            print(f"Validation error for question {question_id}: {e}")
+            return None
         except Exception as e:
             print(f"Error fetching question {question_id}: {e}")
             return None
 
-    def get_random_questions(self, count: int = 10) -> List[Dict[str, Any]]:
-        """Get random questions from database"""
+    def get_random_questions(self, count: int = 10) -> List[Question]:
+        """Get random questions from database and return as Question models"""
         try:
             with self.db_manager.get_db_connection() as conn:
                 cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
@@ -81,10 +95,15 @@ class QuestionRenderingService:
                     q.question_id,
                     q.paper_id,
                     q.question_number,
-                    q.combined_text,
+                    q.combined_text AS question_text,
                     q.images,
                     q.text_length,
                     q.soft_cluster,
+                    q.openai_embedding,
+                    q.umap_embedding,
+                    q.embedding_model,
+                    q.created_at,
+                    q.updated_at,
                     p.paper_name,
                     p.paper_code
                 FROM questions q
@@ -97,11 +116,48 @@ class QuestionRenderingService:
                 cursor.execute(query, (count,))
                 results = cursor.fetchall()
 
-                return [dict(result) for result in results]
+                # Convert to Question models and validate
+                questions = []
+                for result in results:
+                    try:
+                        question = convert_db_row_to_question(dict(result))
+                        ModelValidator.validate_question(question)
+                        questions.append(question)
+                    except ValidationError as e:
+                        print(f"Validation error for question {result.get('question_id')}: {e}")
+                        continue  # Skip invalid questions
+
+                return questions
 
         except Exception as e:
             print(f"Error fetching random questions: {e}")
             return []
+
+    def question_to_summary(self, question: Question) -> Dict[str, Any]:
+        """Convert Question model to summary format for API responses"""
+        # Parse images if they exist
+        images = []
+        try:
+            # The images field might be stored as JSON string or list
+            if question.images:
+                if isinstance(question.images, str):
+                    images = json.loads(question.images)
+                elif isinstance(question.images, list):
+                    images = question.images
+        except (json.JSONDecodeError, TypeError):
+            images = []
+
+        return {
+            "question_id": question.question_id,
+            "paper_code": question.paper_code,
+            "paper_name": question.paper_name,
+            "question_number": question.question_number or 0,
+            "text_length": question.text_length or 0,
+            "num_images": len(images),
+            "has_images": len(images) > 0,
+            "text_preview": (question.question_text or "")[:200] + "..." if question.question_text else "",
+            "image_paths": images
+        }
 
     def get_questions_by_paper(self, paper_code: str) -> List[Dict[str, Any]]:
         """Get questions by paper code"""
@@ -156,7 +212,7 @@ class QuestionRenderingService:
         except (json.JSONDecodeError, TypeError):
             return []
 
-    def render_question_to_bytes(self, question_data: Dict[str, Any],
+    def render_question_to_bytes(self, question: Question,
                                 figsize: Tuple[int, int] = (12, 16),
                                 format: str = 'PNG') -> Optional[bytes]:
         """Render question to image bytes with Redis caching"""
@@ -164,7 +220,7 @@ class QuestionRenderingService:
 
         try:
             # Generate cache key from question content hash
-            cache_key = self._generate_cache_key(question_data, figsize, format)
+            cache_key = self._generate_cache_key_from_question(question, figsize, format)
 
             # Check cache first
             if self.cache_service and self.cache_service.redis:
@@ -172,7 +228,7 @@ class QuestionRenderingService:
                     cached_image = self.cache_service.redis.get(cache_key)
                     if cached_image:
                         self.cache_stats['hits'] += 1
-                        print(f"📷 Cache HIT for question {question_data.get('question_id')} ({(time.time() - start_time)*1000:.1f}ms)")
+                        print(f"📷 Cache HIT for question {question.question_id} ({(time.time() - start_time)*1000:.1f}ms)")
                         return cached_image
                 except Exception as cache_error:
                     print(f"Cache read error: {cache_error}")
@@ -181,19 +237,28 @@ class QuestionRenderingService:
             self.cache_stats['misses'] += 1
             self.cache_stats['renders'] += 1
 
-            images = self.parse_images_data(question_data.get('images'))
+            # Parse images from Question model (images might be stored differently)
+            images = []
+            try:
+                if hasattr(question, 'images') and question.images:
+                    if isinstance(question.images, str):
+                        images = json.loads(question.images)
+                    elif isinstance(question.images, list):
+                        images = question.images
+            except (json.JSONDecodeError, TypeError):
+                images = []
 
             if not images:
-                rendered_image = self._render_text_only_question(question_data, figsize, format)
+                rendered_image = self._render_text_only_question_from_model(question, figsize, format)
             else:
-                rendered_image = self._render_question_with_images(question_data, images, figsize, format)
+                rendered_image = self._render_question_with_images_from_model(question, images, figsize, format)
 
             # Cache the rendered image (1 hour TTL)
             if self.cache_service and self.cache_service.redis and rendered_image:
                 try:
                     self.cache_service.redis.setex(cache_key, 3600, rendered_image)  # 1 hour TTL
                     render_time = (time.time() - start_time) * 1000
-                    print(f"📷 Rendered and cached question {question_data.get('question_id')} ({render_time:.1f}ms)")
+                    print(f"📷 Rendered and cached question {question.question_id} ({render_time:.1f}ms)")
                 except Exception as cache_error:
                     print(f"Cache write error: {cache_error}")
 
@@ -202,6 +267,36 @@ class QuestionRenderingService:
         except Exception as e:
             print(f"Error rendering question: {e}")
             return None
+
+    def _generate_cache_key_from_question(self, question: Question, figsize: Tuple[int, int], format: str) -> str:
+        """Generate cache key from Question model"""
+        content_hash = hashlib.md5(
+            f"{question.question_id}{question.question_text}{question.text_length}".encode()
+        ).hexdigest()
+        return f"rendered_question:{content_hash}:{figsize}:{format}"
+
+    def _render_text_only_question_from_model(self, question: Question, figsize: Tuple[int, int], format: str) -> bytes:
+        """Render question with only text from Question model"""
+        # Use existing text rendering logic but with Question model data
+        question_data = {
+            'question_id': question.question_id,
+            'question_text': question.question_text,
+            'paper_name': question.paper_name,
+            'paper_code': question.paper_code
+        }
+        return self._render_text_only_question(question_data, figsize, format)
+
+    def _render_question_with_images_from_model(self, question: Question, images: List[str], figsize: Tuple[int, int], format: str) -> bytes:
+        """Render question with images from Question model"""
+        # Use existing image rendering logic but with Question model data
+        question_data = {
+            'question_id': question.question_id,
+            'question_text': question.question_text,
+            'paper_name': question.paper_name,
+            'paper_code': question.paper_code,
+            'images': images
+        }
+        return self._render_question_with_images(question_data, images, figsize, format)
 
     def _render_question_with_images(self, question_data: Dict[str, Any],
                                    images: List[str],

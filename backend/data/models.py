@@ -11,7 +11,6 @@ This module handles:
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-import numpy as np
 
 
 @dataclass
@@ -23,6 +22,8 @@ class Question:
     paper_name: str
     paper_code: str
     question_text: Optional[str] = None
+    images: Optional[List[str]] = None
+    question_number: Optional[int] = None
     openai_embedding: Optional[List[float]] = None
     umap_embedding: Optional[List[float]] = None
     soft_cluster: Optional[List[float]] = None
@@ -200,6 +201,8 @@ def convert_db_row_to_question(row: Dict[str, Any]) -> Question:
         paper_name=row.get('paper_name', ''),
         paper_code=row.get('paper_code', ''),
         question_text=row.get('question_text'),
+        images=row.get('images', []),
+        question_number=row.get('question_number'),
         openai_embedding=row.get('openai_embedding'),
         umap_embedding=row.get('umap_embedding'),
         soft_cluster=row.get('soft_cluster'),
