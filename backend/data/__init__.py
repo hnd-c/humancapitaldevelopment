@@ -8,7 +8,6 @@ This module handles:
 """
 
 from .database_manager import *
-from .redis_manager import *
 from .repositories import *
 from .models import *
 

@@ -10,9 +10,8 @@ This module handles:
 """
 
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 import numpy as np
-from data.models import Student, StudentQuestionHistory, StudentPerformance
 
 
 class StudentService:
@@ -276,7 +275,47 @@ class StudentService:
         # Group by hour of day
         hour_performance = {}
         for record in history:
-            hour = record['timestamp'].hour
+            # Handle both datetime objects and strings
+            timestamp = record['timestamp']
+
+            # If it's already a datetime object, use it directly
+            if hasattr(timestamp, 'hour'):
+                hour = timestamp.hour
+            elif isinstance(timestamp, str):
+                try:
+                    # Try multiple parsing strategies
+                    if 'T' in timestamp:
+                        # ISO format
+                        timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    elif '+' in timestamp:
+                        # PostgreSQL format with timezone: '2025-08-10 13:07:31.143886+00:00'
+                        from dateutil.parser import parse
+                        timestamp = parse(timestamp)
+                    else:
+                        # Standard format
+                        timestamp = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+                    hour = timestamp.hour
+                except (ValueError, AttributeError) as e:
+                    print(f"Warning: Could not parse timestamp '{timestamp}': {e}")
+                    continue  # Skip records with unparseable timestamps
+                except ImportError:
+                    # Fallback if dateutil not available
+                    try:
+                        # Try to parse manually by removing microseconds
+                        if '.' in timestamp:
+                            # Remove microseconds: '2025-08-10 13:07:31.143886+00:00' -> '2025-08-10 13:07:31+00:00'
+                            timestamp_clean = timestamp.split('.')[0] + timestamp.split('.')[-1][-6:]
+                            timestamp = datetime.fromisoformat(timestamp_clean)
+                        else:
+                            timestamp = datetime.fromisoformat(timestamp)
+                        hour = timestamp.hour
+                    except ValueError as e:
+                        print(f"Warning: Could not parse timestamp '{timestamp}': {e}")
+                        continue
+            else:
+                print(f"Warning: Unknown timestamp type: {type(timestamp)} - {timestamp}")
+                continue
+
             if hour not in hour_performance:
                 hour_performance[hour] = {'total': 0, 'correct': 0}
 
@@ -309,7 +348,13 @@ class StudentService:
                     cluster_stats[dominant_cluster] = {'total': 0, 'correct': 0, 'time_sum': 0}
 
                 cluster_stats[dominant_cluster]['total'] += 1
-                cluster_stats[dominant_cluster]['time_sum'] += record['time_spent_sec']
+                # Ensure time_spent_sec is numeric
+                time_spent = record.get('time_spent_sec', 0)
+                try:
+                    time_spent = float(time_spent) if time_spent is not None else 0.0
+                except (ValueError, TypeError):
+                    time_spent = 0.0
+                cluster_stats[dominant_cluster]['time_sum'] += time_spent
                 if record['is_correct']:
                     cluster_stats[dominant_cluster]['correct'] += 1
 
@@ -394,7 +439,13 @@ class StudentService:
                 device_performance[device] = {'total': 0, 'correct': 0, 'time_sum': 0}
 
             device_performance[device]['total'] += 1
-            device_performance[device]['time_sum'] += record['time_spent_sec']
+            # Ensure time_spent_sec is numeric
+            time_spent = record.get('time_spent_sec', 0)
+            try:
+                time_spent = float(time_spent) if time_spent is not None else 0.0
+            except (ValueError, TypeError):
+                time_spent = 0.0
+            device_performance[device]['time_sum'] += time_spent
             if record['is_correct']:
                 device_performance[device]['correct'] += 1
 

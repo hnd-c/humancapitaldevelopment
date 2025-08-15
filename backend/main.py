@@ -109,9 +109,12 @@ class HumanCapitalDevelopmentSystem:
     def _initialize_vector_operations(self):
         """Initialize vector operations and embedding manager"""
         try:
-            from ml.embeddings import EmbeddingManager
-            self._vector_ops = EmbeddingManager(self.components['db_manager'])
-            print("✅ Vector operations initialized")
+            from ml.vector_operations_manager import VectorOperationsManager
+            self._vector_ops = VectorOperationsManager(
+                self.components['db_manager'],
+                self.components.get('cache_service')
+            )
+            print("✅ Vector operations initialized with unified manager")
         except Exception as e:
             print(f"⚠️  Vector operations initialization failed: {e}")
             self._vector_ops = None

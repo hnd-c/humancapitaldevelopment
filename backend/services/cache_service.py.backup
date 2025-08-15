@@ -149,15 +149,7 @@ class CacheService:
         try:
             cache_key = f"student_version:{student_id}"
             version = self.redis.get(cache_key)
-            if version:
-                # Handle both string and bytes responses
-                if isinstance(version, bytes):
-                    return version.decode()
-                elif isinstance(version, str):
-                    return version
-                else:
-                    return str(version)
-            return None
+            return version.decode() if version else None
         except Exception as e:
             print(f"Error getting student cache version: {e}")
             return None
@@ -274,9 +266,9 @@ class CacheService:
         }
 
         try:
-            from ml.vector_operations_manager import VectorOperationsManager
+            from ml.embeddings import EmbeddingManager
 
-            embedding_manager = VectorOperationsManager(self.db_manager, self)
+            embedding_manager = EmbeddingManager(self.db_manager)
 
             # Process in batches
             for i in range(0, len(question_ids), batch_size):

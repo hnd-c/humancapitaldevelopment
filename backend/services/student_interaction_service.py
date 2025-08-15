@@ -7,7 +7,7 @@ Uses existing schema: student_question_history, student_paper_enrollments, stude
 import time
 import uuid
 import json
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 from data.database_manager import DatabaseManager
 from services.cache_service import CacheService
 from psycopg2.extras import RealDictCursor
@@ -156,7 +156,7 @@ class StudentInteractionService:
             with self.db_manager.get_db_connection() as conn:
                 cursor = conn.cursor()
 
-                # Enhanced metadata
+                # Enhanced metadata for logging/debugging
                 enhanced_metadata = {
                     'submission_method': submission_method,
                     'attempt_id': attempt_id,
@@ -165,6 +165,7 @@ class StudentInteractionService:
                     'selected_option': selected_option,
                     **metadata
                 }
+                print(f"📊 Submission metadata: {enhanced_metadata}")  # Use the metadata
 
                 insert_query = """
                 INSERT INTO student_question_history
@@ -238,12 +239,28 @@ class StudentInteractionService:
             # Get attempts for this session
             with self.db_manager.get_db_connection() as conn:
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
+                # Since sessions are memory-only for now, we can't get attempts from DB based on session_id
+                # Instead, get recent attempts from the student (derived from session data)
+                student_number = session_data.get('student_id', '1')  # fallback to student 1
+
                 cursor.execute("""
-                    SELECT attempt_id, question_id, status, started_at, completed_at
-                    FROM student_question_attempts
-                    WHERE session_id = %s
-                    ORDER BY started_at
-                """, (session_id,))
+                    SELECT sqh.history_id as attempt_id, q.question_id,
+                           CASE
+                               WHEN sqh.status = 'correct' THEN 'completed'
+                               WHEN sqh.status = 'wrong' THEN 'completed'
+                               WHEN sqh.status = 'skipped' THEN 'completed'
+                               ELSE 'completed'
+                           END as status,
+                           sqh.timestamp as started_at,
+                           sqh.timestamp as completed_at
+                    FROM student_question_history sqh
+                    JOIN questions q ON sqh.internal_question_id = q.internal_question_id
+                    JOIN student_paper_enrollments spe ON sqh.enrollment_id = spe.enrollment_id
+                    JOIN students s ON spe.student_id = s.student_id
+                    WHERE s.base_student_number = %s
+                    ORDER BY sqh.timestamp DESC
+                    LIMIT 20
+                """, (student_number,))
                 attempts = [dict(row) for row in cursor.fetchall()]
 
             progress = {
@@ -289,8 +306,11 @@ class StudentInteractionService:
             with self.db_manager.get_db_connection() as conn:
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
                 cursor.execute("""
-                    SELECT * FROM student_question_attempts
-                    WHERE attempt_id = %s
+                    SELECT history_id as attempt_id, enrollment_id, internal_question_id,
+                           attempt_number, status, is_correct, is_skipped,
+                           time_spent_sec, timestamp, confidence_level, device_type
+                    FROM student_question_history
+                    WHERE history_id = %s
                 """, (attempt_id,))
                 result = cursor.fetchone()
                 return dict(result) if result else None

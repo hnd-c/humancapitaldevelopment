@@ -6,7 +6,6 @@ Provides REST API endpoints for the ML-powered recommendation system
 
 import os
 import time
-import asyncio
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 
@@ -15,17 +14,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 import uvicorn
-import base64
 
 # Import our system components
 from main import HumanCapitalDevelopmentSystem
 from config.environments import load_config_for_environment
 from api.schemas import (
-    RecommendationRequest, RecommendationResponse,
-    StudentHistoryResponse, PerformanceAnalysisResponse,
-    SystemAnalyticsResponse, StudentSessionRequest, StudentSessionResponse,
+    StudentSessionRequest, StudentSessionResponse,
     QuestionAttemptRequest, QuestionAttemptResponse,
     AnswerSubmissionRequest, AnswerSubmissionResponse
+)
+# Import middleware components
+from api.middleware import (
+    RequestLoggingMiddleware,
+    ErrorHandlingMiddleware,
+    PerformanceMonitoringMiddleware,
+    RateLimitingMiddleware,
+    SecurityHeadersMiddleware
 )
 
 
@@ -62,7 +66,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
+# Add middleware stack (order matters - first added = outermost layer)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitingMiddleware, redis_client=None, requests_per_minute=60)
+app.add_middleware(PerformanceMonitoringMiddleware, redis_client=None)
+app.add_middleware(ErrorHandlingMiddleware, debug_mode=os.getenv("DEBUG", "false").lower() == "true")
+app.add_middleware(RequestLoggingMiddleware, enable_detailed_logging=True)
+
+# CORS middleware (keep as innermost)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Configure appropriately for production
@@ -298,12 +309,22 @@ async def get_question_details(
 ):
     """Get detailed information about a specific question"""
     try:
-        question_details = system.vector_ops.get_question_embeddings(question_id)
+        with system.db_manager.get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=system.db_manager.RealDictCursor)
 
-        if not question_details:
-            raise HTTPException(status_code=404, detail="Question not found")
+            cursor.execute("""
+                SELECT q.*, p.paper_name, p.paper_code, sub.subject_name
+                FROM questions q
+                JOIN papers p ON q.paper_id = p.paper_id
+                JOIN subjects sub ON p.subject_id = sub.subject_id
+                WHERE q.question_id = %s
+            """, (question_id,))
 
-        return question_details
+            question = cursor.fetchone()
+            if not question:
+                raise HTTPException(status_code=404, detail="Question not found")
+
+            return dict(question)
 
     except HTTPException:
         raise
@@ -320,18 +341,38 @@ async def get_similar_questions(
 ):
     """Find similar questions using vector similarity"""
     try:
-        # Get question embeddings
-        question_embeddings = system.vector_ops.get_question_embeddings(question_id)
-        if not question_embeddings:
-            raise HTTPException(status_code=404, detail="Question not found")
+        with system.db_manager.get_db_connection() as conn:
+            cursor = conn.cursor(cursor_factory=system.db_manager.RealDictCursor)
 
-        # Find similar questions using multimodal similarity
-        similar_questions = system.vector_ops.find_similar_questions_multimodal(
-            openai_embedding=question_embeddings.get('openai_embedding'),
-            umap_embedding=question_embeddings.get('umap_embedding'),
-            cluster_vector=question_embeddings.get('soft_cluster'),
-            top_k=top_k
-        )
+            # Get question embeddings first
+            cursor.execute("""
+                SELECT openai_embedding, umap_embedding, soft_cluster
+                FROM questions
+                WHERE question_id = %s
+            """, (question_id,))
+
+            question_data = cursor.fetchone()
+            if not question_data:
+                raise HTTPException(status_code=404, detail="Question not found")
+
+            # Use the database function for multimodal similarity
+            cursor.execute("""
+                SELECT * FROM find_similar_questions_multimodal(
+                    %s::vector(3072),
+                    %s::vector(50),
+                    %s::vector(20),
+                    0.5, 0.2, 0.3,
+                    %s, %s
+                )
+            """, (
+                question_data['openai_embedding'],
+                question_data['umap_embedding'],
+                question_data['soft_cluster'],
+                similarity_threshold,
+                top_k
+            ))
+
+            similar_questions = [dict(row) for row in cursor.fetchall()]
 
         return {
             "question_id": question_id,
@@ -512,27 +553,36 @@ async def get_student_sessions(
     limit: int = 10,
     system: HumanCapitalDevelopmentSystem = Depends(get_system)
 ):
-    """Get recent learning sessions for a student"""
+    """Get recent learning sessions for a student - from cache only since we use in-memory sessions"""
     try:
-        with system.db_manager.get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=system.db_manager.RealDictCursor)
+        sessions = []
 
-            cursor.execute("""
-                SELECT session_id, objective, session_type, target_questions,
-                       started_at, completed_at, status
-                FROM student_learning_sessions
-                WHERE student_id = %s
-                ORDER BY started_at DESC
-                LIMIT %s
-            """, (student_id, limit))
+        # Get session data from Redis cache
+        cache_keys = system.cache_manager.redis.keys("session:*")
+        for key in cache_keys:
+            session_data = system.cache_manager.redis.get(key)
+            if session_data:
+                import json
+                session = json.loads(session_data)
+                if str(session.get('student_id')) == str(student_id):
+                    sessions.append({
+                        'session_id': session.get('session_id'),
+                        'objective': session.get('objective'),
+                        'session_type': session.get('session_type', 'practice'),
+                        'started_at': session.get('session_started_at'),
+                        'status': 'active',
+                        'target_questions': len(session.get('recommendations', []))
+                    })
 
-            sessions = [dict(row) for row in cursor.fetchall()]
+        # Sort by started_at and limit
+        sessions.sort(key=lambda x: x.get('started_at', 0), reverse=True)
+        sessions = sessions[:limit]
 
-            return {
-                "student_id": student_id,
-                "sessions": sessions,
-                "total_sessions": len(sessions)
-            }
+        return {
+            "student_id": student_id,
+            "sessions": sessions,
+            "total_sessions": len(sessions)
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get student sessions: {str(e)}")
@@ -764,6 +814,42 @@ async def render_question_base64(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error rendering question: {str(e)}")
+
+
+@app.get("/questions/{question_id}/image")
+async def get_question_image(
+    question_id: str,
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Get question image URL or data (legacy endpoint)"""
+    try:
+        from services.question_rendering_service import QuestionRenderingService
+
+        renderer = QuestionRenderingService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        question_data = renderer.get_question_by_id(question_id)
+        if not question_data:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        # Check if question has images
+        images = question_data.get('images')
+        if not images:
+            raise HTTPException(status_code=404, detail="No images found for this question")
+
+        return {
+            "question_id": question_id,
+            "images": images,
+            "has_images": bool(images),
+            "render_url": f"/questions/{question_id}/render"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting question image: {str(e)}")
 
 
 @app.get("/questions/{question_id}/summary", summary="Get question summary")
