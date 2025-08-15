@@ -12,8 +12,8 @@ This module handles:
 import json
 import time
 import hashlib
-from typing import Dict, List, Any, Optional, Union
-from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional
+from datetime import datetime
 
 
 class CacheService:
@@ -137,9 +137,9 @@ class CacheService:
                 deleted = self.redis.delete(*keys_to_delete)
                 print(f"🗑️ Invalidated {deleted} cache entries for student {student_id}")
                 self.cache_stats['deletes'] += deleted
-                return True
+                return deleted
 
-            return True
+            return 0
         except Exception as e:
             print(f"Error invalidating student cache: {e}")
             return False
@@ -216,8 +216,8 @@ class CacheService:
             # Fallback to computing without caching
             return compute_function(*args, **kwargs)
 
-    def warm_recommendation_cache(self, student_ids: List[str], objectives: List[str] = None) -> Dict[str, Any]:
-        """Pre-warm cache with recommendations for active students"""
+    def warm_recommendation_cache(self, student_ids: List[str] = None, objectives: List[str] = None) -> Dict[str, Any]:
+        """Enhanced cache warming with intelligent student selection"""
         if objectives is None:
             objectives = ['balanced', 'coverage', 'efficiency']
 
@@ -225,20 +225,27 @@ class CacheService:
             'started_at': time.time(),
             'students_processed': 0,
             'recommendations_cached': 0,
-            'errors': []
+            'errors': [],
+            'cache_strategy': 'intelligent'
         }
 
         try:
+            # If no student IDs provided, get active students intelligently
+            if student_ids is None:
+                student_ids = self._get_active_students_for_warming()
+                warming_stats['students_selected'] = len(student_ids)
+                print(f"🔥 Selected {len(student_ids)} active students for cache warming")
+
             from services.recommendation_service import OptimizedRecommendationEngine
 
-            # Initialize recommendation engine
-            rec_engine = OptimizedRecommendationEngine(self.db_manager)
+            # Initialize recommendation engine with cache service
+            rec_engine = OptimizedRecommendationEngine(self.db_manager, cache_service=self, lazy_load=True)
 
             for student_id in student_ids:
                 try:
                     for objective in objectives:
                         # Generate and cache recommendations
-                        recommendations = rec_engine.get_recommendations_for_student(
+                        recommendations = rec_engine.recommend_questions_optimized(
                             student_id=student_id,
                             objective=objective,
                             top_k=10,
@@ -246,18 +253,22 @@ class CacheService:
                         )
 
                         if recommendations:
-                            cache_key = f"recommendations:{student_id}:{objective}"
-                            self.redis.setex(cache_key, 1800, json.dumps(recommendations, default=str))  # 30 minutes
+                            # Cache with longer TTL for warmed data
+                            self.cache_recommendations(student_id, objective, recommendations, ttl=2700)  # 45 minutes
                             warming_stats['recommendations_cached'] += 1
 
                     warming_stats['students_processed'] += 1
+
+                    # Log progress every 10 students
+                    if warming_stats['students_processed'] % 10 == 0:
+                        print(f"⏱️ Cache warming progress: {warming_stats['students_processed']}/{len(student_ids)} students")
 
                 except Exception as e:
                     warming_stats['errors'].append(f"Error for student {student_id}: {str(e)}")
                     continue
 
             warming_stats['duration'] = time.time() - warming_stats['started_at']
-            print(f"Cache warming completed: {warming_stats}")
+            print(f"✨ Cache warming completed: {warming_stats}")
             return warming_stats
 
         except Exception as e:
@@ -570,6 +581,48 @@ class CacheService:
             base_key += f":{param_hash}"
 
         return base_key
+
+    def _get_active_students_for_warming(self, limit: int = 50) -> List[str]:
+        """Get list of active students for intelligent cache warming"""
+        try:
+            with self.db_manager.get_db_connection() as conn:
+                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+
+                # Get students with recent activity (last 24-48 hours)
+                query = """
+                SELECT DISTINCT spe.student_id, COUNT(*) as recent_activity
+                FROM student_question_history sqh
+                JOIN student_paper_enrollments spe ON sqh.enrollment_id = spe.enrollment_id
+                WHERE sqh.timestamp >= NOW() - INTERVAL '48 hours'
+                GROUP BY spe.student_id
+                HAVING COUNT(*) >= 2  -- At least 2 attempts
+                ORDER BY recent_activity DESC, RANDOM()
+                LIMIT %s
+                """
+
+                cursor.execute(query, (limit,))
+                results = cursor.fetchall()
+
+                active_students = [str(row['student_id']) for row in results]
+
+                # If we don't have enough active students, get some random ones
+                if len(active_students) < limit // 2:
+                    cursor.execute("""
+                        SELECT DISTINCT spe.student_id
+                        FROM student_paper_enrollments spe
+                        ORDER BY RANDOM()
+                        LIMIT %s
+                    """, (limit - len(active_students),))
+
+                    additional_students = [str(row['student_id']) for row in cursor.fetchall()]
+                    active_students.extend(additional_students)
+
+                return active_students[:limit]
+
+        except Exception as e:
+            print(f"⚠️ Error getting active students: {e}")
+            # Fallback to a few default student IDs
+            return ['1', '2', '3', '4', '5']
 
     def get_cache_statistics(self) -> Dict[str, Any]:
         """Get current cache statistics"""

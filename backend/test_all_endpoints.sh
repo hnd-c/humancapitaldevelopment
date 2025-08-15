@@ -142,20 +142,20 @@ test_endpoint "Session progress" "$response" "Ensure session ID is valid and pro
 response=$(curl -s "$BASE_URL/student/20/sessions" 2>/dev/null)
 test_endpoint "Student sessions" "$response" "Check if learning_sessions table has data for student_id=20"
 
-echo -e "\n📝 Question Management" | tee -a output_api.txt
+echo -e "\n📝 Question Management & Search" | tee -a output_api.txt
 echo "----------------------------" | tee -a output_api.txt
 
 # Test 16: Random questions
 response=$(curl -s "$BASE_URL/questions/random?count=3" 2>/dev/null)
 test_endpoint "Random questions" "$response" "Check questions table has data. Verify random selection logic in question service"
 
-# Test 17: Search mathematics
-response=$(curl -s "$BASE_URL/questions/search?q=mathematics&limit=5" 2>/dev/null)
-test_endpoint "Search mathematics" "$response" "Verify search indexing. Check if questions have searchable text content"
+# Test 17: Search physics - circuit
+response=$(curl -s "$BASE_URL/questions/search?q=circuit&limit=5" 2>/dev/null)
+test_endpoint "Search physics - circuit" "$response" "Verify search indexing. Check if questions have searchable text content"
 
-# Test 18: Search algebra
-response=$(curl -s "$BASE_URL/questions/search?q=algebra&limit=3" 2>/dev/null)
-test_endpoint "Search algebra" "$response" "Ensure search service is working. Check elasticsearch or text search implementation"
+# Test 18: Search physics - resistance
+response=$(curl -s "$BASE_URL/questions/search?q=resistance&limit=3" 2>/dev/null)
+test_endpoint "Search physics - resistance" "$response" "Ensure search service is working. Check elasticsearch or text search implementation"
 
 # Test 19: Question details
 response=$(curl -s "$BASE_URL/questions/$FIRST_QUESTION" 2>/dev/null)

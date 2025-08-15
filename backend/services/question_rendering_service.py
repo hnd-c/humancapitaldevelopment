@@ -11,25 +11,29 @@ This module handles:
 
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
-import numpy as np
 from pathlib import Path
 import io
 import base64
 import json
+import hashlib
+import time
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
 import warnings
-import random
 
 warnings.filterwarnings('ignore')
 
 
 class QuestionRenderingService:
-    """Database-driven question rendering service"""
+    """Database-driven question rendering service with advanced caching"""
 
     def __init__(self, db_manager, cache_service=None):
         self.db_manager = db_manager
         self.cache_service = cache_service
+        self.cache_stats = {
+            'hits': 0,
+            'misses': 0,
+            'renders': 0
+        }
 
     def get_question_by_id(self, question_id: str) -> Optional[Dict[str, Any]]:
         """Get question data from database by question_id"""
@@ -155,14 +159,45 @@ class QuestionRenderingService:
     def render_question_to_bytes(self, question_data: Dict[str, Any],
                                 figsize: Tuple[int, int] = (12, 16),
                                 format: str = 'PNG') -> Optional[bytes]:
-        """Render question to image bytes"""
+        """Render question to image bytes with Redis caching"""
+        start_time = time.time()
+
         try:
+            # Generate cache key from question content hash
+            cache_key = self._generate_cache_key(question_data, figsize, format)
+
+            # Check cache first
+            if self.cache_service and self.cache_service.redis:
+                try:
+                    cached_image = self.cache_service.redis.get(cache_key)
+                    if cached_image:
+                        self.cache_stats['hits'] += 1
+                        print(f"📷 Cache HIT for question {question_data.get('question_id')} ({(time.time() - start_time)*1000:.1f}ms)")
+                        return cached_image
+                except Exception as cache_error:
+                    print(f"Cache read error: {cache_error}")
+
+            # Cache miss - render question
+            self.cache_stats['misses'] += 1
+            self.cache_stats['renders'] += 1
+
             images = self.parse_images_data(question_data.get('images'))
 
             if not images:
-                return self._render_text_only_question(question_data, figsize, format)
+                rendered_image = self._render_text_only_question(question_data, figsize, format)
+            else:
+                rendered_image = self._render_question_with_images(question_data, images, figsize, format)
 
-            return self._render_question_with_images(question_data, images, figsize, format)
+            # Cache the rendered image (1 hour TTL)
+            if self.cache_service and self.cache_service.redis and rendered_image:
+                try:
+                    self.cache_service.redis.setex(cache_key, 3600, rendered_image)  # 1 hour TTL
+                    render_time = (time.time() - start_time) * 1000
+                    print(f"📷 Rendered and cached question {question_data.get('question_id')} ({render_time:.1f}ms)")
+                except Exception as cache_error:
+                    print(f"Cache write error: {cache_error}")
+
+            return rendered_image
 
         except Exception as e:
             print(f"Error rendering question: {e}")
@@ -375,9 +410,92 @@ class QuestionRenderingService:
 
                 cursor.execute(query)
                 results = cursor.fetchall()
-
                 return [dict(result) for result in results]
 
         except Exception as e:
             print(f"Error fetching papers list: {e}")
             return []
+
+    def _generate_cache_key(self, question_data: Dict[str, Any],
+                           figsize: Tuple[int, int], format: str) -> str:
+        """Generate a unique cache key for the rendered question"""
+        # Create content hash from question data
+        content_str = json.dumps({
+            'question_id': question_data.get('question_id'),
+            'combined_text': question_data.get('combined_text', ''),
+            'images': question_data.get('images'),
+            'paper_code': question_data.get('paper_code'),
+            'question_number': question_data.get('question_number')
+        }, sort_keys=True)
+
+        content_hash = hashlib.md5(content_str.encode()).hexdigest()[:12]
+
+        return f"rendered_question:{content_hash}:{figsize[0]}x{figsize[1]}:{format}"
+
+    def get_cache_statistics(self) -> Dict[str, Any]:
+        """Get cache performance statistics"""
+        total_requests = self.cache_stats['hits'] + self.cache_stats['misses']
+        hit_rate = self.cache_stats['hits'] / total_requests if total_requests > 0 else 0
+
+        return {
+            'cache_hits': self.cache_stats['hits'],
+            'cache_misses': self.cache_stats['misses'],
+            'total_renders': self.cache_stats['renders'],
+            'hit_rate': hit_rate,
+            'hit_rate_percentage': f"{hit_rate * 100:.1f}%"
+        }
+
+    def warm_popular_questions_cache(self, question_ids: Optional[List[str]] = None,
+                                   figsize: Tuple[int, int] = (12, 16)) -> Dict[str, Any]:
+        """Pre-warm cache with popular questions"""
+        warming_stats = {
+            'started_at': time.time(),
+            'questions_processed': 0,
+            'questions_cached': 0,
+            'errors': []
+        }
+
+        try:
+            if question_ids is None:
+                # Get popular questions from recent activity
+                with self.db_manager.get_db_connection() as conn:
+                    cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+
+                    # Get most accessed questions in last 24 hours
+                    cursor.execute("""
+                        SELECT q.question_id, COUNT(*) as access_count
+                        FROM questions q
+                        JOIN student_question_history sqh ON q.internal_question_id = sqh.internal_question_id
+                        WHERE sqh.timestamp >= NOW() - INTERVAL '24 hours'
+                        GROUP BY q.question_id
+                        ORDER BY access_count DESC
+                        LIMIT 50
+                    """)
+
+                    popular_questions = cursor.fetchall()
+                    question_ids = [q['question_id'] for q in popular_questions]
+
+            # Pre-render and cache popular questions
+            for question_id in question_ids:
+                try:
+                    question_data = self.get_question_by_id(question_id)
+                    if question_data:
+                        # Render with different formats
+                        for format_type in ['PNG', 'JPEG']:
+                            self.render_question_to_bytes(question_data, figsize, format_type)
+
+                        warming_stats['questions_cached'] += 1
+
+                    warming_stats['questions_processed'] += 1
+
+                except Exception as e:
+                    warming_stats['errors'].append(f"Error warming {question_id}: {str(e)}")
+                    continue
+
+            warming_stats['duration'] = time.time() - warming_stats['started_at']
+            print(f"Cache warming completed: {warming_stats}")
+            return warming_stats
+
+        except Exception as e:
+            warming_stats['fatal_error'] = str(e)
+            return warming_stats

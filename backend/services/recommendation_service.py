@@ -5,20 +5,19 @@ Integrates enriched vectors + transition matrix to recommend specific questions
 
 import numpy as np
 import pandas as pd
-from ml.vector_encoder import RichVectorEncoder, load_student_history_normalized, create_question_mapping_from_normalized
-from ml.transition_matrix import _build_cooccurrence_transitions, recommend_next_clusters
-from data.database_manager import DatabaseManager
-import json
+from ml.vector_encoder import RichVectorEncoder, load_student_history_normalized
+from ml.transition_matrix import _build_cooccurrence_transitions
 import time
 from psycopg2.extras import RealDictCursor
 
 
 class OptimizedRecommendationEngine:
-    def __init__(self, db_manager, lazy_load=False):
-        """Initialize the complete recommendation system"""
+    def __init__(self, db_manager, cache_service=None, lazy_load=False):
+        """Initialize the complete recommendation system with caching support"""
         print("🚀 Initializing Recommendation Engine...")
 
         self.db = db_manager
+        self.cache_service = cache_service
         self.lazy_load = lazy_load
         self._initialized = False
 
@@ -28,6 +27,15 @@ class OptimizedRecommendationEngine:
         self.question_mapping = None
         self.transition_matrix = None
         self.encoder = None
+
+        # Initialize cache service if not provided
+        if not self.cache_service:
+            try:
+                from services.cache_service import CacheService
+                self.cache_service = CacheService(self.db.redis_client, self.db)
+            except Exception as e:
+                print(f"⚠️ Could not initialize cache service: {e}")
+                self.cache_service = None
 
         if not lazy_load:
             self._full_initialization()
@@ -158,7 +166,7 @@ class OptimizedRecommendationEngine:
                         import ast
                         try:
                             return np.array(ast.literal_eval(vector_str), dtype=np.float32)
-                        except:
+                        except Exception:
                             return None
                     return vector_str
 
@@ -366,62 +374,60 @@ class OptimizedRecommendationEngine:
                 T_normalized[i] = np.ones(T.shape[1]) / T.shape[1]
         return T_normalized
 
-    def recommend_questions_optimized(self, student_id, objective='balanced', top_k=5):
-        """Database-optimized recommendations with caching and cache invalidation"""
+    def recommend_questions_optimized(self, student_id, objective='balanced', top_k=5, use_cache=True):
+        """Database-optimized recommendations with proper model integration and caching"""
+        from data.models import RecommendationRequest, ModelValidator
+
+        # Validate request using data model
+        request = RecommendationRequest(
+            student_id=str(student_id),
+            objective=objective,
+            top_k=top_k,
+            use_cache=use_cache
+        )
+
+        try:
+            ModelValidator.validate_recommendation_request(request)
+        except Exception as e:
+            print(f"❌ Validation error: {e}")
+            return []
+
         # Ensure components are initialized
         if self.lazy_load:
             self._ensure_initialized()
 
-        # Initialize cache service if not already done
-        if not hasattr(self, '_cache_service'):
-            from services.cache_service import CacheService
-            self._cache_service = CacheService(self.db.redis_client, self.db)
+        # Check cache if enabled
+        if use_cache and self.cache_service:
+            cached_recommendations = self.cache_service.get_cached_recommendations(
+                request.student_id, request.objective
+            )
+            if cached_recommendations:
+                print(f"✅ Using cached recommendations for student {request.student_id}")
+                return cached_recommendations
 
-        # Check cache validity first using versioning
-        current_version = self._cache_service.get_student_cache_version(str(student_id))
-
-        cache_key = f"recommendations:{student_id}:{objective}:{top_k}"
-        cached = self.db.redis_client.get(cache_key)
-
-        if cached:
-            cached_data = json.loads(cached)
-            cached_version = cached_data.get('cache_version')
-
-            # Check if cache is still valid
-            if self._cache_service.is_cache_valid(str(student_id), cached_version):
-                print(f"✅ Using valid cached recommendations for student {student_id}")
-                return cached_data.get('recommendations', cached_data)
-            else:
-                print(f"🔄 Cache invalid for student {student_id}, recomputing...")
-                # Invalidate this specific cache entry
-                self.db.redis_client.delete(cache_key)
-
-        # Get student history (cached)
-        student_history = self.db.get_student_history_optimized(student_id)
+        # Get student history from database
+        student_history = self.db.get_student_history_optimized(request.student_id)
 
         if not student_history:
             print("📋 No student history found, using default recommendations")
-            return self._get_default_recommendations_db(top_k)
+            recommendations = self._get_default_recommendations_db(request.top_k)
+        else:
+            # Get current state using database operations
+            current_state = self._encode_student_context_db(
+                request.student_id, student_history, request.objective
+            )
 
-        # Get current state using database operations
-        current_state = self._encode_student_context_db(student_id, student_history, objective)
+            # Use PostgreSQL for similarity search
+            recommendations = self._find_recommendations_db(
+                current_state, student_history, request.top_k
+            )
 
-        # Use PostgreSQL for similarity search
-        recommendations = self._find_recommendations_db(current_state, student_history, top_k)
-
-        # Set current cache version if not exists
-        if not current_version:
-            current_version = str(time.time())
-            self._cache_service.set_student_cache_version(str(student_id), current_version)
-
-        # Cache recommendations with version information for 10 minutes
-        cache_data = {
-            'recommendations': recommendations,
-            'cache_version': current_version,
-            'cached_at': time.time()
-        }
-        self.db.redis_client.setex(cache_key, 600, json.dumps(cache_data, default=str))
-        print(f"💾 Cached recommendations for student {student_id} with version {current_version[:10]}...")
+        # Cache recommendations if caching is enabled
+        if use_cache and self.cache_service and recommendations:
+            self.cache_service.cache_recommendations(
+                request.student_id, request.objective, recommendations
+            )
+            print(f"💾 Cached {len(recommendations)} recommendations for student {request.student_id}")
 
         return recommendations
 

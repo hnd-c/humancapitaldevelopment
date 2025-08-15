@@ -1,48 +1,161 @@
 🚀 Testing All API Endpoints
 ==============================
-Timestamp: Fri Aug 15 19:46:40 +0545 2025
+Timestamp: Fri Aug 15 22:04:04 +0545 2025
 
 📊 System & Health Endpoints
 ----------------------------
 
 [1;33mTesting:[0m Root endpoint
-Request: Root endpoint
-Response: {"message":"Human Capital Development API","version":"1.0.0","status":"operational","docs":"/docs","health":"/health"}
----
 [0;32m✅ PASSED[0m
-Success: Valid JSON response received
-
 
 [1;33mTesting:[0m Health check
-Request: Health check
-Response: {"status":"healthy","timestamp":1755266500.522827,"uptime_seconds":23.724267959594727,"database_status":"healthy","redis_status":"healthy","ml_components_status":"healthy","total_questions":4560}
----
 [0;32m✅ PASSED[0m
-Success: Valid JSON response received
-
 
 [1;33mTesting:[0m System analytics
-Request: System analytics
-Response: {"health":{"timestamp":1755266500.568179,"uptime_seconds":23.769619941711426,"environment":"development","database_status":"healthy","redis_status":"healthy","ml_components_status":"healthy","total_questions":4560,"cache_hit_rate":0.44964028776978415,"total_recommendations":1,"avg_global_response_time":0.00019621849060058594,"active_students":1,"redis_memory_usage":"1.55M","recommendation_engine_available":true},"performance":{"cache_hit_rate":0.45161290322580644,"total_recommendations":1,"avg_global_response_time":0.00019621849060058594,"active_students":1,"redis_memory_usage":"1.55M"},"total_questions":4560,"total_students":30,"total_attempts":3753,"recent_activity":[{"date":"2025-08-15","attempts":11},{"date":"2025-08-14","attempts":69},{"date":"2025-08-13","attempts":147},{"date":"2025-08-12","attempts":149},{"date":"2025-08-11","attempts":144},{"date":"2025-08-10","attempts":154},{"date":"2025-08-09","attempts":101},{"date":"2025-08-08","attempts":120}]}
----
 [0;32m✅ PASSED[0m
-Success: Valid JSON response received
-
 
 🎯 Recommendation Endpoints
 ----------------------------
 
 [1;33mTesting:[0m Balanced recommendations
-Request: Balanced recommendations
-Response: {"student_id":"1","objective":"balanced","recommendations":[{"question_id":"9702_w23_qp_11_14","internal_question_id":694,"score":0.4653679653679654,"primary_cluster":6,"cluster_strength":1.0,"reasoning":"ML-scored: 0.465 alignment with learning path","paper_id":93},{"question_id":"9702_s18_qp_12_10","internal_question_id":2250,"score":0.4653679653679654,"primary_cluster":6,"cluster_strength":1.0,"reasoning":"ML-scored: 0.465 alignment with learning path","paper_id":85},{"question_id":"9702_s11_qp_12_20","internal_question_id":2500,"score":0.4653679653679654,"primary_cluster":6,"cluster_strength":1.0,"reasoning":"ML-scored: 0.465 alignment with learning path","paper_id":103},{"question_id":"9702_s16_qp_12_13","internal_question_id":733,"score":0.4653679653679654,"primary_cluster":6,"cluster_strength":1.0,"reasoning":"ML-scored: 0.465 alignment with learning path","paper_id":83},{"question_id":"9702_m25_qp_12_12","internal_question_id":1972,"score":0.4653679653679654,"primary_cluster":6,"cluster_strength":1.0,"reasoning":"ML-scored: 0.465 alignment with learning path","paper_id":27}],"generated_at":1755266529.451664,"cache_hit":false,"response_time_ms":28816.80417060852}
----
 [0;32m✅ PASSED[0m
-Success: Valid JSON response received
-
 
 [1;33mTesting:[0m Coverage recommendations
-Request: Coverage recommendations
-Response: {"student_id":"2","objective":"coverage","recommendations":[{"question_id":"9702_w13_qp_13_26","internal_question_id":226,"score":0.1873203494184114,"primary_cluster":1,"cluster_strength":1.0,"reasoning":"ML-scored: 0.187 alignment with learning path","paper_id":89},{"question_id":"9702_s19_qp_11_23","internal_question_id":583,"score":0.1873203494184114,"primary_cluster":1,"cluster_strength":1.0,"reasoning":"ML-scored: 0.187 alignment with learning path","paper_id":38},{"question_id":"9702_w04_qp_1_27","internal_question_id":467,"score":0.1873203494184114,"primary_cluster":1,"cluster_strength":1.0,"reasoning":"ML-scored: 0.187 alignment with learning path","paper_id":90}],"generated_at":1755266529.5193348,"cache_hit":false,"response_time_ms":35.8119010925293}
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Efficiency recommendations
+[0;32m✅ PASSED[0m
+
+👨‍🎓 Student Management
+----------------------------
+
+[1;33mTesting:[0m Student 1 performance
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Student 2 performance
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Student 1 history
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Student 2 history (limited)
+[0;32m✅ PASSED[0m
+
+🎓 Student Learning Workflow
+----------------------------
+
+[1;33mTesting:[0m Start learning session
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Start question attempt
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Submit answer
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Session progress
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Student sessions
+[0;32m✅ PASSED[0m
+
+📝 Question Management & Search
+----------------------------
+
+[1;33mTesting:[0m Random questions
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Search physics - circuit
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Search physics - resistance
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Question details
+[0;32m✅ PASSED[0m
+
+🤖 Answer Validation & Timing
+----------------------------
+
+[1;33mTesting:[0m Question timing stats
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Validate correct answer
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Validate incorrect answer
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Get answer key
+[0;32m✅ PASSED[0m
+
+📋 Paper Management
+----------------------------
+
+[1;33mTesting:[0m All papers
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Questions by paper
+[0;32m✅ PASSED[0m
+
+🖼️ Question Rendering
+----------------------------
+
+[1;33mTesting:[0m Question image
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Question summary
+[0;32m✅ PASSED[0m
+
+🔍 Similar Questions
+----------------------------
+
+[1;33mTesting:[0m Similar questions
+[0;32m✅ PASSED[0m
+
+🔧 Cache Management
+----------------------------
+
+[1;33mTesting:[0m Student cache invalidation
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Full cache invalidation
+[0;32m✅ PASSED[0m
+
+📊 Performance Testing
+----------------------------
+
+[1;33mTesting:[0m Fresh recommendations
+[0;32m✅ PASSED[0m
+
+[1;33mTesting:[0m Cached recommendations
+[0;32m✅ PASSED[0m
+
+
+==============================
+🏁 TEST RESULTS SUMMARY
+==============================
+[0;32m✅ PASSED: 32 tests[0m
+[0;31m❌ FAILED: 0 tests[0m
+📊 Total tests: 32
+
+[0;32m🎉 ALL TESTS PASSED! System is fully functional.[0m
+
+📋 TESTED FEATURES:
+• System health and monitoring
+• ML-powered question recommendations
+• Student performance analysis
+• Learning session management
+• Question search and retrieval
+• Answer validation and timing
+• Image processing and rendering
+• Vector similarity matching
+• Cache management and optimization
+• Paper and content organization
+==============================
+📄 Full detailed results saved to: output_api.txt
+==============================
+mary_cluster":1,"cluster_strength":1.0,"reasoning":"ML-scored: 0.187 alignment with learning path","paper_id":113},{"question_id":"9702_s22_qp_12_23","internal_question_id":2663,"score":0.1873203494184114,"primary_cluster":1,"cluster_strength":1.0,"reasoning":"ML-scored: 0.187 alignment with learning path","paper_id":50},{"question_id":"9702_w22_qp_11_23","internal_question_id":4463,"score":0.1873203494184114,"primary_cluster":1,"cluster_strength":1.0,"reasoning":"ML-scored: 0.187 alignment with learning path","paper_id":55}],"generated_at":1755274745.1998641,"cache_hit":false,"response_time_ms":38.21301460266113}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -50,7 +163,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Efficiency recommendations
 Request: Efficiency recommendations
-Response: {"student_id":"3","objective":"efficiency","recommendations":[{"question_id":"9702_w12_qp_11_24","internal_question_id":2864,"score":0.42081044968325754,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.421 alignment with learning path","paper_id":31},{"question_id":"9702_w12_qp_12_27","internal_question_id":667,"score":0.42081044968325754,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.421 alignment with learning path","paper_id":92},{"question_id":"9702_s20_qp_12_18","internal_question_id":1058,"score":0.42081044968325754,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.421 alignment with learning path","paper_id":96}],"generated_at":1755266529.589231,"cache_hit":false,"response_time_ms":38.08021545410156}
+Response: {"student_id":"3","objective":"efficiency","recommendations":[{"question_id":"9702_w12_qp_11_23","internal_question_id":2863,"score":0.42081044968325754,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.421 alignment with learning path","paper_id":31},{"question_id":"9702_w05_qp_1_20","internal_question_id":1580,"score":0.42081044968325754,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.421 alignment with learning path","paper_id":98},{"question_id":"9702_w11_qp_13_25","internal_question_id":3305,"score":0.42081044968325754,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.421 alignment with learning path","paper_id":84}],"generated_at":1755274745.274816,"cache_hit":false,"response_time_ms":39.60013389587402}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -61,7 +174,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Student 1 performance
 Request: Student 1 performance
-Response: {"student_id":"1","total_attempts":145,"overall_success_rate":0.4482758620689655,"cluster_performance":{"6":{"success_rate":1.0,"avg_time":135.1,"total_attempts":5},"15":{"success_rate":0.5,"avg_time":58.525,"total_attempts":10},"18":{"success_rate":0.0,"avg_time":79.30333333333334,"total_attempts":15},"9":{"success_rate":0.5,"avg_time":71.2925,"total_attempts":20},"12":{"success_rate":1.0,"avg_time":117.62,"total_attempts":5},"1":{"success_rate":0.5,"avg_time":124.87000000000003,"total_attempts":10},"7":{"success_rate":1.0,"avg_time":73.08,"total_attempts":5},"19":{"success_rate":0.4,"avg_time":86.31999999999992,"total_attempts":25},"0":{"success_rate":0.6666666666666666,"avg_time":103.03333333333335,"total_attempts":15},"4":{"success_rate":0.0,"avg_time":11.18,"total_attempts":5},"5":{"success_rate":0.0,"avg_time":70.565,"total_attempts":10},"10":{"success_rate":0.6666666666666666,"avg_time":108.80999999999999,"total_attempts":15},"8":{"success_rate":0.0,"avg_time":136.49,"total_attempts":5}},"recent_activity":[{"history_id":9,"enrollment_id":4,"internal_question_id":3909,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"163.58","timestamp":"2025-07-16 04:22:05.966868+00:00","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_w21_qp_13_29","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1"},{"history_id":6,"enrollment_id":1,"internal_question_id":3909,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"163.58","timestamp":"2025-07-16 04:22:05.966868+00:00","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_w21_qp_13_29","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1"},{"history_id":8,"enrollment_id":3,"internal_question_id":3909,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"163.58","timestamp":"2025-07-16 04:22:05.966868+00:00","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_w21_qp_13_29","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1"},{"history_id":10,"enrollment_id":5,"internal_question_id":3909,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"163.58","timestamp":"2025-07-16 04:22:05.966868+00:00","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_w21_qp_13_29","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1"},{"history_id":7,"enrollment_id":2,"internal_question_id":3909,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"163.58","timestamp":"2025-07-16 04:22:05.966868+00:00","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_w21_qp_13_29","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1"},{"history_id":1,"enrollment_id":1,"internal_question_id":2783,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"136.49","timestamp":"2025-07-15 18:04:53.585087+00:00","confidence_level":4,"device_type":"mobile","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_s16_qp_11_23","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1"},{"history_id":3,"enrollment_id":3,"internal_question_id":2783,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"136.49","timestamp":"2025-07-15 18:04:53.585087+00:00","confidence_level":4,"device_type":"mobile","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_s16_qp_11_23","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1"},{"history_id":2,"enrollment_id":2,"internal_question_id":2783,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"136.49","timestamp":"2025-07-15 18:04:53.585087+00:00","confidence_level":4,"device_type":"mobile","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_s16_qp_11_23","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1"},{"history_id":4,"enrollment_id":4,"internal_question_id":2783,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"136.49","timestamp":"2025-07-15 18:04:53.585087+00:00","confidence_level":4,"device_type":"mobile","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_s16_qp_11_23","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1"},{"history_id":5,"enrollment_id":5,"internal_question_id":2783,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"136.49","timestamp":"2025-07-15 18:04:53.585087+00:00","confidence_level":4,"device_type":"mobile","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_s16_qp_11_23","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1"}],"analysis_timestamp":1755266529.628182}
+Response: {"student_id":"1","total_attempts":145,"overall_success_rate":0.4482758620689655,"cluster_performance":{"6":{"success_rate":1.0,"avg_time":135.1,"total_attempts":5},"15":{"success_rate":0.5,"avg_time":58.525,"total_attempts":10},"18":{"success_rate":0.0,"avg_time":79.30333333333334,"total_attempts":15},"9":{"success_rate":0.5,"avg_time":71.2925,"total_attempts":20},"12":{"success_rate":1.0,"avg_time":117.62,"total_attempts":5},"1":{"success_rate":0.5,"avg_time":124.87000000000003,"total_attempts":10},"7":{"success_rate":1.0,"avg_time":73.08,"total_attempts":5},"19":{"success_rate":0.4,"avg_time":86.31999999999992,"total_attempts":25},"0":{"success_rate":0.6666666666666666,"avg_time":103.03333333333335,"total_attempts":15},"4":{"success_rate":0.0,"avg_time":11.18,"total_attempts":5},"5":{"success_rate":0.0,"avg_time":70.565,"total_attempts":10},"10":{"success_rate":0.6666666666666666,"avg_time":108.80999999999999,"total_attempts":15},"8":{"success_rate":0.0,"avg_time":136.49,"total_attempts":5}},"recent_activity":[{"history_id":144,"enrollment_id":4,"internal_question_id":1694,"attempt_number":1,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"135.10","timestamp":"2025-08-10T13:07:31.143886Z","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_s23_qp_12_14"},{"history_id":145,"enrollment_id":5,"internal_question_id":1694,"attempt_number":1,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"135.10","timestamp":"2025-08-10T13:07:31.143886Z","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_s23_qp_12_14"},{"history_id":143,"enrollment_id":3,"internal_question_id":1694,"attempt_number":1,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"135.10","timestamp":"2025-08-10T13:07:31.143886Z","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_s23_qp_12_14"},{"history_id":142,"enrollment_id":2,"internal_question_id":1694,"attempt_number":1,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"135.10","timestamp":"2025-08-10T13:07:31.143886Z","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_s23_qp_12_14"},{"history_id":141,"enrollment_id":1,"internal_question_id":1694,"attempt_number":1,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"135.10","timestamp":"2025-08-10T13:07:31.143886Z","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_s23_qp_12_14"},{"history_id":137,"enrollment_id":2,"internal_question_id":2094,"attempt_number":2,"status":"skipped","is_correct":false,"is_skipped":true,"time_spent_sec":"18.00","timestamp":"2025-08-08T13:45:15.851315Z","confidence_level":3,"device_type":"tablet","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_w19_qp_12_14"},{"history_id":139,"enrollment_id":4,"internal_question_id":2094,"attempt_number":2,"status":"skipped","is_correct":false,"is_skipped":true,"time_spent_sec":"18.00","timestamp":"2025-08-08T13:45:15.851315Z","confidence_level":3,"device_type":"tablet","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_w19_qp_12_14"},{"history_id":140,"enrollment_id":5,"internal_question_id":2094,"attempt_number":2,"status":"skipped","is_correct":false,"is_skipped":true,"time_spent_sec":"18.00","timestamp":"2025-08-08T13:45:15.851315Z","confidence_level":3,"device_type":"tablet","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_w19_qp_12_14"},{"history_id":138,"enrollment_id":3,"internal_question_id":2094,"attempt_number":2,"status":"skipped","is_correct":false,"is_skipped":true,"time_spent_sec":"18.00","timestamp":"2025-08-08T13:45:15.851315Z","confidence_level":3,"device_type":"tablet","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_w19_qp_12_14"},{"history_id":136,"enrollment_id":1,"internal_question_id":2094,"attempt_number":2,"status":"skipped","is_correct":false,"is_skipped":true,"time_spent_sec":"18.00","timestamp":"2025-08-08T13:45:15.851315Z","confidence_level":3,"device_type":"tablet","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_w19_qp_12_14"}],"analysis_timestamp":1755274745.332994}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -69,7 +182,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Student 2 performance
 Request: Student 2 performance
-Response: {"student_id":"2","total_attempts":26,"overall_success_rate":0.5384615384615384,"cluster_performance":{"19":{"success_rate":0.5,"avg_time":83.53,"total_attempts":4},"2":{"success_rate":0.6666666666666666,"avg_time":121.52999999999997,"total_attempts":6},"6":{"success_rate":1.0,"avg_time":100.79499999999999,"total_attempts":4},"4":{"success_rate":0.0,"avg_time":49.705000000000005,"total_attempts":4},"9":{"success_rate":0.0,"avg_time":155.94,"total_attempts":2},"12":{"success_rate":0.6666666666666666,"avg_time":94.25666666666666,"total_attempts":6}},"recent_activity":[{"history_id":155,"enrollment_id":7,"internal_question_id":4380,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"42.99","timestamp":"2025-07-23 06:53:01.867490+00:00","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_s24_qp_12_20"},{"history_id":154,"enrollment_id":6,"internal_question_id":4380,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"42.99","timestamp":"2025-07-23 06:53:01.867490+00:00","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_s24_qp_12_20"},{"history_id":152,"enrollment_id":6,"internal_question_id":2931,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"155.94","timestamp":"2025-07-21 00:35:25.510661+00:00","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_w19_qp_13_11"},{"history_id":153,"enrollment_id":7,"internal_question_id":2931,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"155.94","timestamp":"2025-07-21 00:35:25.510661+00:00","confidence_level":5,"device_type":"desktop","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_w19_qp_13_11"},{"history_id":151,"enrollment_id":7,"internal_question_id":2926,"attempt_number":3,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"74.14","timestamp":"2025-07-17 14:02:45.370685+00:00","confidence_level":3,"device_type":"mobile","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_w19_qp_13_6"},{"history_id":150,"enrollment_id":6,"internal_question_id":2926,"attempt_number":3,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"74.14","timestamp":"2025-07-17 14:02:45.370685+00:00","confidence_level":3,"device_type":"mobile","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_w19_qp_13_6"},{"history_id":149,"enrollment_id":7,"internal_question_id":2926,"attempt_number":2,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"104.58","timestamp":"2025-07-17 13:32:49.174654+00:00","confidence_level":5,"device_type":"mobile","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_w19_qp_13_6"},{"history_id":148,"enrollment_id":6,"internal_question_id":2926,"attempt_number":2,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"104.58","timestamp":"2025-07-17 13:32:49.174654+00:00","confidence_level":5,"device_type":"mobile","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_w19_qp_13_6"},{"history_id":147,"enrollment_id":7,"internal_question_id":2926,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"104.05","timestamp":"2025-07-17 12:53:42.433760+00:00","confidence_level":4,"device_type":"mobile","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_w19_qp_13_6"},{"history_id":146,"enrollment_id":6,"internal_question_id":2926,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"104.05","timestamp":"2025-07-17 12:53:42.433760+00:00","confidence_level":4,"device_type":"mobile","created_at":"2025-08-15 11:52:26.090118","question_id":"9702_w19_qp_13_6"}],"analysis_timestamp":1755266529.673481}
+Response: {"student_id":"2","total_attempts":26,"overall_success_rate":0.5384615384615384,"cluster_performance":{"19":{"success_rate":0.5,"avg_time":83.53,"total_attempts":4},"2":{"success_rate":0.6666666666666666,"avg_time":121.52999999999997,"total_attempts":6},"6":{"success_rate":1.0,"avg_time":100.79499999999999,"total_attempts":4},"4":{"success_rate":0.0,"avg_time":49.705000000000005,"total_attempts":4},"9":{"success_rate":0.0,"avg_time":155.94,"total_attempts":2},"12":{"success_rate":0.6666666666666666,"avg_time":94.25666666666666,"total_attempts":6}},"recent_activity":[{"history_id":170,"enrollment_id":6,"internal_question_id":2943,"attempt_number":2,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"119.07","timestamp":"2025-08-13T15:01:08.662390Z","confidence_level":3,"device_type":"desktop","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_w19_qp_13_23"},{"history_id":171,"enrollment_id":7,"internal_question_id":2943,"attempt_number":2,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"119.07","timestamp":"2025-08-13T15:01:08.662390Z","confidence_level":3,"device_type":"desktop","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_w19_qp_13_23"},{"history_id":169,"enrollment_id":7,"internal_question_id":2943,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"47.99","timestamp":"2025-08-13T14:53:16.147718Z","confidence_level":3,"device_type":"desktop","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_w19_qp_13_23"},{"history_id":168,"enrollment_id":6,"internal_question_id":2943,"attempt_number":1,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"47.99","timestamp":"2025-08-13T14:53:16.147718Z","confidence_level":3,"device_type":"desktop","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_w19_qp_13_23"},{"history_id":166,"enrollment_id":6,"internal_question_id":2937,"attempt_number":2,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"199.06","timestamp":"2025-08-10T21:03:36.068544Z","confidence_level":4,"device_type":"mobile","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_w19_qp_13_17"},{"history_id":167,"enrollment_id":7,"internal_question_id":2937,"attempt_number":2,"status":"wrong","is_correct":false,"is_skipped":false,"time_spent_sec":"199.06","timestamp":"2025-08-10T21:03:36.068544Z","confidence_level":4,"device_type":"mobile","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_w19_qp_13_17"},{"history_id":165,"enrollment_id":7,"internal_question_id":2937,"attempt_number":1,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"58.71","timestamp":"2025-08-10T20:53:10.074688Z","confidence_level":3,"device_type":"mobile","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_w19_qp_13_17"},{"history_id":164,"enrollment_id":6,"internal_question_id":2937,"attempt_number":1,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"58.71","timestamp":"2025-08-10T20:53:10.074688Z","confidence_level":3,"device_type":"mobile","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_w19_qp_13_17"},{"history_id":162,"enrollment_id":6,"internal_question_id":4373,"attempt_number":2,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"91.44","timestamp":"2025-07-31T22:45:08.360199Z","confidence_level":2,"device_type":"desktop","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_s24_qp_12_13"},{"history_id":163,"enrollment_id":7,"internal_question_id":4373,"attempt_number":2,"status":"correct","is_correct":true,"is_skipped":false,"time_spent_sec":"91.44","timestamp":"2025-07-31T22:45:08.360199Z","confidence_level":2,"device_type":"desktop","created_at":"2025-08-15T11:52:26.090118","question_id":"9702_s24_qp_12_13"}],"analysis_timestamp":1755274745.384754}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -96,26 +209,26 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Start learning session
 Request: Start learning session
-Response: {"session_id":"9a64f91e-d632-499e-94b9-fa151c5601fe","student_id":"20","objective":"balanced","session_type":"practice","recommendations":[{"question_id":"9702_w06_qp_1_23","internal_question_id":2743,"score":0.5242427941156026,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.524 alignment with learning path","paper_id":58},{"question_id":"9702_w10_qp_11_33","internal_question_id":833,"score":0.5242006336147627,"primary_cluster":4,"cluster_strength":0.9998766,"reasoning":"ML-scored: 0.524 alignment with learning path","paper_id":30},{"question_id":"9702_s12_qp_13_36","internal_question_id":516,"score":0.18257746701332017,"primary_cluster":5,"cluster_strength":1.0,"reasoning":"ML-scored: 0.183 alignment with learning path","paper_id":87}],"session_started_at":1755266529.8120608,"estimated_duration_minutes":9}
+Response: {"session_id":"32d59a82-47a7-4204-a893-df8b60019d8a","student_id":"20","objective":"balanced","session_type":"practice","recommendations":[{"question_id":"9702_m17_qp_12_20","internal_question_id":3460,"score":0.42723795123526964,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.427 alignment with learning path","paper_id":4},{"question_id":"9702_s13_qp_13_34","internal_question_id":3714,"score":0.42723795123526964,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.427 alignment with learning path","paper_id":66},{"question_id":"9702_s17_qp_13_20","internal_question_id":180,"score":0.42723795123526964,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.427 alignment with learning path","paper_id":41}],"session_started_at":1755274745.518541,"estimated_duration_minutes":9}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
 
-Extracted SESSION_ID: 9a64f91e-d632-499e-94b9-fa151c5601fe
-Extracted FIRST_QUESTION: 9702_w06_qp_1_23
+Extracted SESSION_ID: 32d59a82-47a7-4204-a893-df8b60019d8a
+Extracted FIRST_QUESTION: 9702_m17_qp_12_20
 
 [1;33mTesting:[0m Start question attempt
 Request: Start question attempt
-Response: {"attempt_id":"c7f2bcf7-afbb-49f3-8ff3-47faf183cbba","student_id":"20","question_id":"9702_w06_qp_1_23","question_data":{"internal_question_id":2743,"question_id":"9702_w06_qp_1_23","paper_id":58,"question_number":23,"images":["p1_images/9702_w06_qp_1/9702_w06_qp_1_20250728_223501/page_8/ChunkType.text_b4a2018c-f317-4830-a77e-1a804f6811aa_0.png"],"text_length":93,"source_file":"9702_w06_qp_1_grouped_by_questions.json","ms":"C","is_active":true,"created_at":"2025-08-15T17:37:08.741061","updated_at":"2025-08-15T17:37:08.741066","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1"},"started_at":1755266533.8123431,"status":"in_progress"}
+Response: {"attempt_id":"2dcc9a06-6b26-4151-b26b-09609245ba45","student_id":"20","question_id":"9702_m17_qp_12_20","question_data":{"internal_question_id":3460,"question_id":"9702_m17_qp_12_20","paper_id":4,"question_number":20,"images":["p1_images/9702_m17_qp_12/9702_m17_qp_12_20250727_221235/page_6/ChunkType.text_8a5522fa-8876-4313-a76a-29893571e04c_0.png"],"text_length":360,"source_file":"9702_m17_qp_12_grouped_by_questions.json","ms":"B","is_active":true,"created_at":"2025-08-15T17:37:15.446183","updated_at":"2025-08-15T17:37:15.446186","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1"},"started_at":1755274775.115154,"status":"in_progress"}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
 
-Extracted ATTEMPT_ID: c7f2bcf7-afbb-49f3-8ff3-47faf183cbba
+Extracted ATTEMPT_ID: 2dcc9a06-6b26-4151-b26b-09609245ba45
 
 [1;33mTesting:[0m Submit answer
 Request: Submit answer
-Response: {"submission_id":"0ebe6695-c0c5-4c4d-82cb-1c47fac92b99","student_id":"20","question_id":"9702_w06_qp_1_23","is_correct":true,"time_spent_seconds":0.06208372116088867,"submitted_at":1755266533.934859,"feedback":"Excellent! Quick and correct.","cache_invalidated":true,"next_recommendations_available":true}
+Response: {"submission_id":"fa412ea5-9f82-4c12-a1f0-92fa966fb361","student_id":"20","question_id":"9702_m17_qp_12_20","is_correct":false,"time_spent_seconds":0.06125688552856445,"submitted_at":1755274775.238187,"feedback":"Incorrect, but you seemed confident. Review the concept carefully.","cache_invalidated":true,"next_recommendations_available":true}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -123,7 +236,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Session progress
 Request: Session progress
-Response: {"student_id":"20","session_id":"9a64f91e-d632-499e-94b9-fa151c5601fe","progress":{"session_data":{"session_id":"9a64f91e-d632-499e-94b9-fa151c5601fe","student_id":"20","objective":"balanced","session_type":"practice","recommendations":[{"question_id":"9702_w06_qp_1_23","internal_question_id":2743,"score":0.5242427941156026,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.524 alignment with learning path","paper_id":58},{"question_id":"9702_w10_qp_11_33","internal_question_id":833,"score":0.5242006336147627,"primary_cluster":4,"cluster_strength":0.9998766,"reasoning":"ML-scored: 0.524 alignment with learning path","paper_id":30},{"question_id":"9702_s12_qp_13_36","internal_question_id":516,"score":0.18257746701332017,"primary_cluster":5,"cluster_strength":1.0,"reasoning":"ML-scored: 0.183 alignment with learning path","paper_id":87}],"session_started_at":1755266529.8120608,"estimated_duration_minutes":9},"attempts":[{"attempt_id":3754,"question_id":"9702_w06_qp_1_23","status":"completed","started_at":"2025-08-15T19:47:13.874152+00:00","completed_at":"2025-08-15T19:47:13.874152+00:00"},{"attempt_id":3753,"question_id":"9702_m17_qp_12_21","status":"completed","started_at":"2025-08-15T19:39:51.286159+00:00","completed_at":"2025-08-15T19:39:51.286159+00:00"},{"attempt_id":3752,"question_id":"9702_w02_qp_1_36","status":"completed","started_at":"2025-08-15T19:30:50.146155+00:00","completed_at":"2025-08-15T19:30:50.146155+00:00"},{"attempt_id":3751,"question_id":"9702_s03_qp_1_32","status":"completed","started_at":"2025-08-15T19:14:02.480760+00:00","completed_at":"2025-08-15T19:14:02.480760+00:00"},{"attempt_id":3750,"question_id":"9702_s22_qp_12_17","status":"completed","started_at":"2025-08-15T19:09:21.482881+00:00","completed_at":"2025-08-15T19:09:21.482881+00:00"},{"attempt_id":3749,"question_id":"9702_w14_qp_13_35","status":"completed","started_at":"2025-08-15T19:07:11.639603+00:00","completed_at":"2025-08-15T19:07:11.639603+00:00"},{"attempt_id":3748,"question_id":"9702_s12_qp_13_40","status":"completed","started_at":"2025-08-15T18:25:30.713378+00:00","completed_at":"2025-08-15T18:25:30.713378+00:00"},{"attempt_id":3747,"question_id":"9702_w07_qp_1_40","status":"completed","started_at":"2025-08-15T18:06:06.192720+00:00","completed_at":"2025-08-15T18:06:06.192720+00:00"},{"attempt_id":3746,"question_id":"9702_s04_qp_1_35","status":"completed","started_at":"2025-08-15T17:59:30.192787+00:00","completed_at":"2025-08-15T17:59:30.192787+00:00"},{"attempt_id":3745,"question_id":"9702_m22_qp_12_29","status":"completed","started_at":"2025-08-15T17:45:44.177110+00:00","completed_at":"2025-08-15T17:45:44.177110+00:00"},{"attempt_id":3744,"question_id":"9702_m17_qp_12_36","status":"completed","started_at":"2025-08-15T17:40:00.156013+00:00","completed_at":"2025-08-15T17:40:00.156013+00:00"},{"attempt_id":3743,"question_id":"9702_s17_qp_13_38","status":"completed","started_at":"2025-08-15T17:38:42.646519+00:00","completed_at":"2025-08-15T17:38:42.646519+00:00"},{"attempt_id":2594,"question_id":"9702_s21_qp_13_31","status":"completed","started_at":"2025-08-12T14:46:51.578779+00:00","completed_at":"2025-08-12T14:46:51.578779+00:00"},{"attempt_id":2595,"question_id":"9702_s21_qp_13_31","status":"completed","started_at":"2025-08-12T14:46:51.578779+00:00","completed_at":"2025-08-12T14:46:51.578779+00:00"},{"attempt_id":2596,"question_id":"9702_s21_qp_13_31","status":"completed","started_at":"2025-08-12T14:46:51.578779+00:00","completed_at":"2025-08-12T14:46:51.578779+00:00"},{"attempt_id":2597,"question_id":"9702_s21_qp_13_31","status":"completed","started_at":"2025-08-12T14:46:51.578779+00:00","completed_at":"2025-08-12T14:46:51.578779+00:00"},{"attempt_id":2590,"question_id":"9702_w10_qp_13_38","status":"completed","started_at":"2025-08-12T07:58:56.693501+00:00","completed_at":"2025-08-12T07:58:56.693501+00:00"},{"attempt_id":2591,"question_id":"9702_w10_qp_13_38","status":"completed","started_at":"2025-08-12T07:58:56.693501+00:00","completed_at":"2025-08-12T07:58:56.693501+00:00"},{"attempt_id":2592,"question_id":"9702_w10_qp_13_38","status":"completed","started_at":"2025-08-12T07:58:56.693501+00:00","completed_at":"2025-08-12T07:58:56.693501+00:00"},{"attempt_id":2593,"question_id":"9702_w10_qp_13_38","status":"completed","started_at":"2025-08-12T07:58:56.693501+00:00","completed_at":"2025-08-12T07:58:56.693501+00:00"}],"total_questions":3,"completed_questions":20,"in_progress_questions":0},"retrieved_at":1755266533.974875}
+Response: {"student_id":"20","session_id":"32d59a82-47a7-4204-a893-df8b60019d8a","progress":{"session_data":{"session_id":"32d59a82-47a7-4204-a893-df8b60019d8a","student_id":"20","objective":"balanced","session_type":"practice","recommendations":[{"question_id":"9702_m17_qp_12_20","internal_question_id":3460,"score":0.42723795123526964,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.427 alignment with learning path","paper_id":4},{"question_id":"9702_s13_qp_13_34","internal_question_id":3714,"score":0.42723795123526964,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.427 alignment with learning path","paper_id":66},{"question_id":"9702_s17_qp_13_20","internal_question_id":180,"score":0.42723795123526964,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.427 alignment with learning path","paper_id":41}],"session_started_at":1755274745.518541,"estimated_duration_minutes":9},"attempts":[{"attempt_id":3758,"question_id":"9702_m17_qp_12_20","status":"completed","started_at":"2025-08-15T22:04:35.175888+00:00","completed_at":"2025-08-15T22:04:35.175888+00:00"},{"attempt_id":3757,"question_id":"9702_w18_qp_12_21","status":"completed","started_at":"2025-08-15T22:02:23.788088+00:00","completed_at":"2025-08-15T22:02:23.788088+00:00"},{"attempt_id":3756,"question_id":"9702_m19_qp_12_33","status":"completed","started_at":"2025-08-15T21:53:32.400105+00:00","completed_at":"2025-08-15T21:53:32.400105+00:00"},{"attempt_id":3755,"question_id":"9702_w14_qp_12_17","status":"completed","started_at":"2025-08-15T21:52:00.781642+00:00","completed_at":"2025-08-15T21:52:00.781642+00:00"},{"attempt_id":3754,"question_id":"9702_w06_qp_1_23","status":"completed","started_at":"2025-08-15T19:47:13.874152+00:00","completed_at":"2025-08-15T19:47:13.874152+00:00"},{"attempt_id":3753,"question_id":"9702_m17_qp_12_21","status":"completed","started_at":"2025-08-15T19:39:51.286159+00:00","completed_at":"2025-08-15T19:39:51.286159+00:00"},{"attempt_id":3752,"question_id":"9702_w02_qp_1_36","status":"completed","started_at":"2025-08-15T19:30:50.146155+00:00","completed_at":"2025-08-15T19:30:50.146155+00:00"},{"attempt_id":3751,"question_id":"9702_s03_qp_1_32","status":"completed","started_at":"2025-08-15T19:14:02.480760+00:00","completed_at":"2025-08-15T19:14:02.480760+00:00"},{"attempt_id":3750,"question_id":"9702_s22_qp_12_17","status":"completed","started_at":"2025-08-15T19:09:21.482881+00:00","completed_at":"2025-08-15T19:09:21.482881+00:00"},{"attempt_id":3749,"question_id":"9702_w14_qp_13_35","status":"completed","started_at":"2025-08-15T19:07:11.639603+00:00","completed_at":"2025-08-15T19:07:11.639603+00:00"},{"attempt_id":3748,"question_id":"9702_s12_qp_13_40","status":"completed","started_at":"2025-08-15T18:25:30.713378+00:00","completed_at":"2025-08-15T18:25:30.713378+00:00"},{"attempt_id":3747,"question_id":"9702_w07_qp_1_40","status":"completed","started_at":"2025-08-15T18:06:06.192720+00:00","completed_at":"2025-08-15T18:06:06.192720+00:00"},{"attempt_id":3746,"question_id":"9702_s04_qp_1_35","status":"completed","started_at":"2025-08-15T17:59:30.192787+00:00","completed_at":"2025-08-15T17:59:30.192787+00:00"},{"attempt_id":3745,"question_id":"9702_m22_qp_12_29","status":"completed","started_at":"2025-08-15T17:45:44.177110+00:00","completed_at":"2025-08-15T17:45:44.177110+00:00"},{"attempt_id":3744,"question_id":"9702_m17_qp_12_36","status":"completed","started_at":"2025-08-15T17:40:00.156013+00:00","completed_at":"2025-08-15T17:40:00.156013+00:00"},{"attempt_id":3743,"question_id":"9702_s17_qp_13_38","status":"completed","started_at":"2025-08-15T17:38:42.646519+00:00","completed_at":"2025-08-15T17:38:42.646519+00:00"},{"attempt_id":2594,"question_id":"9702_s21_qp_13_31","status":"completed","started_at":"2025-08-12T14:46:51.578779+00:00","completed_at":"2025-08-12T14:46:51.578779+00:00"},{"attempt_id":2595,"question_id":"9702_s21_qp_13_31","status":"completed","started_at":"2025-08-12T14:46:51.578779+00:00","completed_at":"2025-08-12T14:46:51.578779+00:00"},{"attempt_id":2596,"question_id":"9702_s21_qp_13_31","status":"completed","started_at":"2025-08-12T14:46:51.578779+00:00","completed_at":"2025-08-12T14:46:51.578779+00:00"},{"attempt_id":2597,"question_id":"9702_s21_qp_13_31","status":"completed","started_at":"2025-08-12T14:46:51.578779+00:00","completed_at":"2025-08-12T14:46:51.578779+00:00"}],"total_questions":3,"completed_questions":20,"in_progress_questions":0},"retrieved_at":1755274775.285707}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -131,34 +244,34 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Student sessions
 Request: Student sessions
-Response: {"student_id":"20","sessions":[{"session_id":"9a64f91e-d632-499e-94b9-fa151c5601fe","objective":"balanced","session_type":"practice","started_at":1755266529.8120608,"status":"active","target_questions":3}],"total_sessions":1}
+Response: {"student_id":"20","sessions":[{"session_id":"32d59a82-47a7-4204-a893-df8b60019d8a","objective":"balanced","session_type":"practice","started_at":1755274745.518541,"status":"active","target_questions":3}],"total_sessions":1}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
 
 
-📝 Question Management
+📝 Question Management & Search
 ----------------------------
 
 [1;33mTesting:[0m Random questions
 Request: Random questions
-Response: {"count":3,"questions":[{"question_id":"9702_w04_qp_1_1","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":1,"text_length":513,"num_images":2,"has_images":true,"text_preview":"Which line of the table gives values that are equal to a time of 1 ps (one picosecond) and a distance of 1 Gm (one gigametre)?\n\n<table><thead><tr><th></th><th>time of 1 ps</th><th>distance of 1 Gm</th...","image_paths":["p1_images/9702_w04_qp_1/9702_w04_qp_1_20250728_221912/page_0/ChunkType.text_ad91268d-60fd-476f-a1d7-3e6b3de28a83_0.png","p1_images/9702_w04_qp_1/9702_w04_qp_1_20250728_221912/page_0/ChunkType.table_0107e119-d0eb-45fb-abb1-5f9200579947_0.png"]},{"question_id":"9702_s13_qp_11_10","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":10,"text_length":321,"num_images":1,"has_images":true,"text_preview":"Which of the following is a statement of the principle of conservation of momentum?\n\nA   In an elastic collision momentum is constant.\n\nB   Momentum is the product of mass and velocity.\n\nC   The force...","image_paths":["p1_images/9702_s13_qp_11/9702_s13_qp_11_20250728_220045/page_4/ChunkType.text_210112d8-5850-45c4-824a-bc310f9dec1e_0.png"]},{"question_id":"9702_s06_qp_1_38","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":38,"text_length":175,"num_images":1,"has_images":true,"text_preview":"What is a correct order of magnitude estimate for the diameter of a typical atomic nucleus?\n\nA   $10^{-14}$ m      B   $10^{-18}$ m      C   $10^{-22}$ m      D   $10^{-26}$ m","image_paths":["p1_images/9702_s06_qp_1/9702_s06_qp_1_20250728_154616/page_14/ChunkType.text_807269a1-2cfb-45ba-b730-6d89e6a74dc7_0.png"]}]}
+Response: {"count":3,"questions":[{"question_id":"9702_s16_qp_12_6","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":6,"text_length":4456,"num_images":6,"has_images":true,"text_preview":"The acceleration of free fall on the Moon is 1.6 m s⁻². The Moon has no atmosphere. An astronaut standing on the surface of the Moon drops a feather.\n\nWhich graph shows the variation with time of the ...","image_paths":["p1_images/9702_s16_qp_12/9702_s16_qp_12_20250728_222448/page_2/ChunkType.text_8b9777ce-7206-4942-b9f8-6520192df291_0.png","p1_images/9702_s16_qp_12/9702_s16_qp_12_20250728_222448/page_2/ChunkType.text_67191e34-1fab-4f05-bda6-e58e5d967276_0.png","p1_images/9702_s16_qp_12/9702_s16_qp_12_20250728_222448/page_2/ChunkType.figure_9c91455b-3fff-458b-b8fd-50180d141502_0.png","p1_images/9702_s16_qp_12/9702_s16_qp_12_20250728_222448/page_2/ChunkType.figure_12a5d441-9661-4d76-b4c1-6603d93cddfc_0.png","p1_images/9702_s16_qp_12/9702_s16_qp_12_20250728_222448/page_2/ChunkType.figure_db28215a-3d91-43db-bbd6-3c804e834bac_0.png","p1_images/9702_s16_qp_12/9702_s16_qp_12_20250728_222448/page_2/ChunkType.figure_2fce471e-58ad-451a-8bc5-f08fe6682650_0.png"]},{"question_id":"9702_w11_qp_13_5","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":5,"text_length":691,"num_images":5,"has_images":true,"text_preview":"A cylindrical tube rolling down a slope of inclination $\\theta$ moves a distance $L$ in time $T$. The equation relating these quantities is\n\n$L\\left(3 + \\frac{a^2}{P}\\right) = QT^2 \\sin\\theta$\n\nWhere ...","image_paths":["p1_images/9702_w11_qp_13/9702_w11_qp_13_20250728_224337/page_2/ChunkType.text_42a6fa4a-b3a5-41ae-8f65-23d6278b11b4_0.png","p1_images/9702_w11_qp_13/9702_w11_qp_13_20250728_224337/page_2/ChunkType.text_e24efc03-c0a3-41d4-b1b9-f6e886bf8b63_0.png","p1_images/9702_w11_qp_13/9702_w11_qp_13_20250728_224337/page_2/ChunkType.text_1f3408f3-6223-4a79-b48b-143c525dcd8c_0.png","p1_images/9702_w11_qp_13/9702_w11_qp_13_20250728_224337/page_2/ChunkType.text_36511ded-8f13-4f71-b553-2ed313d475a5_0.png","p1_images/9702_w11_qp_13/9702_w11_qp_13_20250728_224337/page_2/ChunkType.table_461693f2-9a9e-4866-bb89-f865e58aa05d_0.png"]},{"question_id":"9702_w18_qp_13_19","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":19,"text_length":3194,"num_images":4,"has_images":true,"text_preview":"In an experiment to measure the Young modulus of a metal, a wire of the metal of diameter 0.25 mm is clamped, as shown.\n\nSummary : This is a schematic diagram illustrating an experimental setup for me...","image_paths":["p1_images/9702_w18_qp_13/9702_w18_qp_13_20250728_150443/page_6/ChunkType.text_7323549f-dcfc-41fe-9c37-6c7a7ccfe546_0.png","p1_images/9702_w18_qp_13/9702_w18_qp_13_20250728_150443/page_6/ChunkType.figure_6b543b15-248d-416a-b2c6-c47056bc789f_0.png","p1_images/9702_w18_qp_13/9702_w18_qp_13_20250728_150443/page_6/ChunkType.figure_7e4b5bad-30df-4270-b57d-4f1b945c939e_0.png","p1_images/9702_w18_qp_13/9702_w18_qp_13_20250728_150443/page_6/ChunkType.text_cfb86e3f-4bb1-4289-9df9-3a1893f093bb_0.png"]}]}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
 
 
-[1;33mTesting:[0m Search mathematics
-Request: Search mathematics
-Response: {"query":"mathematics","count":5,"questions":[{"question_id":"9702_w12_qp_12_10","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":10,"text_length":3446,"num_images":2,"has_images":true,"text_preview":"Summary : This illustration shows the trajectory of a ski jumper in a competition, with a focus on the path from the jump-off point (P) to the landing point (Q), and asks about the relationship betwee...","image_paths":["p1_images/9702_w12_qp_12/9702_w12_qp_12_20250728_230240/page_5/ChunkType.figure_8029d515-32ad-4d87-86e0-ff1f6ba5c03c_0.png","p1_images/9702_w12_qp_12/9702_w12_qp_12_20250728_230240/page_5/ChunkType.figure_5978081d-79a8-4fe6-82f5-23e98b09084f_0.png"]},{"question_id":"9702_w13_qp_13_26","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":26,"text_length":2534,"num_images":4,"has_images":true,"text_preview":"The three waves shown in each diagram have the same amplitude and frequency but differ in phase.\n\nThey are added together to give a resultant wave.\n\nSummary : This figure presents two cases (A and B) ...","image_paths":["p1_images/9702_w13_qp_13/9702_w13_qp_13_20250728_225944/page_12/ChunkType.text_2a6aac6a-1afd-40d0-862b-7c0b104cefb1_0.png","p1_images/9702_w13_qp_13/9702_w13_qp_13_20250728_225944/page_12/ChunkType.text_b5f5f083-c8de-44e5-a994-0b03b88e68f0_0.png","p1_images/9702_w13_qp_13/9702_w13_qp_13_20250728_225944/page_12/ChunkType.figure_22693805-c6fc-4bc0-bf91-2260d9a054ad_0.png","p1_images/9702_w13_qp_13/9702_w13_qp_13_20250728_225944/page_12/ChunkType.figure_a6d99af5-0008-418c-98e9-ffc200590c21_0.png"]},{"question_id":"9702_w21_qp_13_1","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":1,"text_length":1671,"num_images":1,"has_images":true,"text_preview":"Summary : This is a labeled diagram showing a paperback book placed upright next to a ruler, with the book's thickness aligned to the ruler's scale. The diagram is used to determine the thickness of t...","image_paths":["p1_images/9702_w21_qp_13/9702_w21_qp_13_20250728_152332/page_0/ChunkType.figure_20725454-4974-4fbe-bc63-8ef093734de5_0.png"]},{"question_id":"9702_w13_qp_13_4","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":4,"text_length":1208,"num_images":4,"has_images":true,"text_preview":"The spring constant $k$ of a coiled wire spring is given by the equation\n\nSummary : This image shows a mathematical formula expressing the variable k in terms of G, r, n, and R.\n\nequation:\n  Formula :...","image_paths":["p1_images/9702_w13_qp_13/9702_w13_qp_13_20250728_225944/page_1/ChunkType.text_dc77c69e-c335-4d41-93a5-1bc772e38135_0.png","p1_images/9702_w13_qp_13/9702_w13_qp_13_20250728_225944/page_1/ChunkType.figure_000095a9-808d-4364-8fbe-62d2fefe3bdf_0.png","p1_images/9702_w13_qp_13/9702_w13_qp_13_20250728_225944/page_1/ChunkType.text_afb02abe-d416-480e-9df7-a6f515c3259b_0.png","p1_images/9702_w13_qp_13/9702_w13_qp_13_20250728_225944/page_1/ChunkType.text_35f617ba-922c-4756-b003-f23b9741ed75_0.png"]},{"question_id":"9702_w04_qp_1_5","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":5,"text_length":1664,"num_images":3,"has_images":true,"text_preview":"When a 12V 50 Hz supply is connected to the Y-terminals of an oscilloscope, the trace in the diagram is obtained.\n\nSummary : This figure shows a single smooth curve plotted on a square grid, with a sc...","image_paths":["p1_images/9702_w04_qp_1/9702_w04_qp_1_20250728_221912/page_2/ChunkType.text_77bed4c9-7d21-468e-b960-136b1c9b2612_0.png","p1_images/9702_w04_qp_1/9702_w04_qp_1_20250728_221912/page_2/ChunkType.figure_9acd610a-719f-43b3-96d0-f6debc9e384b_0.png","p1_images/9702_w04_qp_1/9702_w04_qp_1_20250728_221912/page_2/ChunkType.text_67bacc88-f2a7-4222-9d02-f13a001f62e7_0.png"]}]}
+[1;33mTesting:[0m Search physics - circuit
+Request: Search physics - circuit
+Response: {"query":"circuit","count":5,"questions":[{"question_id":"9702_w11_qp_13_36","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":36,"text_length":3926,"num_images":3,"has_images":true,"text_preview":"A cell, two resistors of equal resistance and an ammeter are used to construct four circuits. The resistors are the only parts of the circuits that have resistance.\n\nSummary : The image presents four ...","image_paths":["p1_images/9702_w11_qp_13/9702_w11_qp_13_20250728_224337/page_20/ChunkType.text_b8cc8e3c-7f88-408c-9017-71fb13de482d_0.png","p1_images/9702_w11_qp_13/9702_w11_qp_13_20250728_224337/page_20/ChunkType.figure_d3fdfd81-98ca-4693-a392-44b233af1900_0.png","p1_images/9702_w11_qp_13/9702_w11_qp_13_20250728_224337/page_20/ChunkType.figure_d77621c9-cb36-440d-aa5a-a4a0faa974c3_0.png"]},{"question_id":"9702_m20_qp_12_37","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":37,"text_length":5695,"num_images":6,"has_images":true,"text_preview":"In the circuits shown, the cell has negligible internal resistance.\n\nWhich diagram shows a potential divider circuit that can vary the potential difference (p.d.) across the lamp?\n\nSummary : This is a...","image_paths":["p1_images/9702_m20_qp_12/9702_m20_qp_12_20250728_130803/page_14/ChunkType.text_630f901d-9080-4d3f-bc17-d5e059d41fb4_0.png","p1_images/9702_m20_qp_12/9702_m20_qp_12_20250728_130803/page_14/ChunkType.text_fa52ad02-df29-45c6-9743-b968acb18646_0.png","p1_images/9702_m20_qp_12/9702_m20_qp_12_20250728_130803/page_14/ChunkType.figure_1f919b5c-f2b2-4c3d-a369-c3b7bcc3a0be_0.png","p1_images/9702_m20_qp_12/9702_m20_qp_12_20250728_130803/page_14/ChunkType.figure_b1f3d26e-2155-42f9-ae69-8e46864ee27d_0.png","p1_images/9702_m20_qp_12/9702_m20_qp_12_20250728_130803/page_14/ChunkType.figure_562dbfc9-a3cb-4753-81c1-9f8d87648102_0.png","p1_images/9702_m20_qp_12/9702_m20_qp_12_20250728_130803/page_14/ChunkType.figure_3e3a72d0-129d-40df-b826-c15ca64da2a1_0.png"]},{"question_id":"9702_s08_qp_1_38","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":38,"text_length":4517,"num_images":4,"has_images":true,"text_preview":"The unknown e.m.f. *E* of a cell is to be determined using a potentiometer circuit. The balance length is to be measured when the galvanometer records a null reading.\n\nSummary : This image presents tw...","image_paths":["p1_images/9702_s08_qp_1/9702_s08_qp_1_20250728_155744/page_14/ChunkType.text_524b2138-adf4-4206-b631-672fe8d23c07_0.png","p1_images/9702_s08_qp_1/9702_s08_qp_1_20250728_155744/page_14/ChunkType.figure_cc3362a5-f10e-4995-8627-935a34817859_0.png","p1_images/9702_s08_qp_1/9702_s08_qp_1_20250728_155744/page_14/ChunkType.figure_50dd50a2-d595-41d8-a479-7ff7d6bd42ac_0.png","p1_images/9702_s08_qp_1/9702_s08_qp_1_20250728_155744/page_14/ChunkType.figure_c0b73915-9839-45ee-a163-fa64715fa0e0_0.png"]},{"question_id":"9702_s22_qp_12_37","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":37,"text_length":6706,"num_images":7,"has_images":true,"text_preview":"A potentiometer circuit is used to determine the electromotive force (e.m.f.) $E_X$ of a cell. The circuit includes a second cell of known e.m.f. $E_0$ and negligible internal resistance, and a unifor...","image_paths":["p1_images/9702_s22_qp_12/9702_s22_qp_12_20250728_141936/page_13/ChunkType.text_cc721c05-706f-4d6b-aea7-259be34ee648_0.png","p1_images/9702_s22_qp_12/9702_s22_qp_12_20250728_141936/page_13/ChunkType.text_94778ba0-8527-4c94-8d8f-6c58c25c0301_0.png","p1_images/9702_s22_qp_12/9702_s22_qp_12_20250728_141936/page_13/ChunkType.text_5c4ff971-2dd6-4c0c-8aba-2ef823fef1fb_0.png","p1_images/9702_s22_qp_12/9702_s22_qp_12_20250728_141936/page_13/ChunkType.figure_5f0f5f2a-8507-4502-9cf1-27cb6bc808f2_0.png","p1_images/9702_s22_qp_12/9702_s22_qp_12_20250728_141936/page_13/ChunkType.figure_396ae03d-bdae-4ff6-9401-9d32bfcd21cf_0.png","p1_images/9702_s22_qp_12/9702_s22_qp_12_20250728_141936/page_13/ChunkType.figure_89c52f7f-b029-453c-b614-db1d1baaee5b_0.png","p1_images/9702_s22_qp_12/9702_s22_qp_12_20250728_141936/page_13/ChunkType.figure_b00b3494-816b-4c0d-b770-8ddf31067081_0.png"]},{"question_id":"9702_s17_qp_11_36","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":36,"text_length":2773,"num_images":4,"has_images":true,"text_preview":"A computer is used to detect the change of position of a switch.\n\nTo detect the change of position, the computer requires a potential difference (p.d.) of 0 V to its input at one switch position and a...","image_paths":["p1_images/9702_s17_qp_11/9702_s17_qp_11_20250728_132950/page_13/ChunkType.text_0dd826ec-d442-4d4f-ae2d-e36e782b536a_0.png","p1_images/9702_s17_qp_11/9702_s17_qp_11_20250728_132950/page_13/ChunkType.text_d7504d44-fa7b-4c8d-a103-2eb20df83dd6_0.png","p1_images/9702_s17_qp_11/9702_s17_qp_11_20250728_132950/page_13/ChunkType.text_ec83fff5-af3d-4579-9d76-edaf487af72b_0.png","p1_images/9702_s17_qp_11/9702_s17_qp_11_20250728_132950/page_13/ChunkType.figure_7e33c8f8-962e-47fd-8a53-8e5a2795c982_0.png"]}]}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
 
 
-[1;33mTesting:[0m Search algebra
-Request: Search algebra
-Response: {"query":"algebra","count":3,"questions":[{"question_id":"9702_m22_qp_12_35","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":35,"text_length":742,"num_images":3,"has_images":true,"text_preview":"Each of Kirchhoff’s two laws presumes that some quantity is conserved.\n\nWhich row states Kirchhoff’s first law and names the quantity that is conserved?\n\n<table><thead><tr><th></th><th>statement</th><...","image_paths":["p1_images/9702_m22_qp_12/9702_m22_qp_12_20250728_130352/page_10/ChunkType.text_d4a0e2d1-4a13-470c-a10e-79e2ceb35462_0.png","p1_images/9702_m22_qp_12/9702_m22_qp_12_20250728_130352/page_10/ChunkType.text_3a1bd51c-750e-4bea-9531-dc1e831e0510_0.png","p1_images/9702_m22_qp_12/9702_m22_qp_12_20250728_130352/page_10/ChunkType.table_85566a4a-b0d2-4ee8-aa60-7de65f3d382b_0.png"]},{"question_id":"9702_s15_qp_12_35","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":35,"text_length":741,"num_images":2,"has_images":true,"text_preview":"Each of Kirchhoff's two laws presumes that some quantity is conserved.\n\nWhich row states Kirchhoff's first law and names the quantity that is conserved?\n<table><thead><tr><th></th><th>statement</th><t...","image_paths":["p1_images/9702_s15_qp_12/9702_s15_qp_12_20250728_214813/page_14/ChunkType.text_b7ca675c-af34-4beb-a60a-4c9913dd5a39_0.png","p1_images/9702_s15_qp_12/9702_s15_qp_12_20250728_214813/page_14/ChunkType.table_cc21953e-393a-46c7-b8c5-c8ffbf71abaa_0.png"]},{"question_id":"9702_w19_qp_11_3","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":3,"text_length":2346,"num_images":2,"has_images":true,"text_preview":"Summary : This diagram illustrates two vectors, X and Y, each represented by an arrow drawn to scale, showing their directions and relative magnitudes.\n\nvector diagram:\nVectors :\n  • Vector X: Arrow p...","image_paths":["p1_images/9702_w19_qp_11/9702_w19_qp_11_20250728_150753/page_0/ChunkType.figure_274b2357-7ad9-425a-b795-3ab3c56f448e_0.png","p1_images/9702_w19_qp_11/9702_w19_qp_11_20250728_150753/page_0/ChunkType.figure_ff5a4b94-1f09-442f-b977-78bd2233887f_0.png"]}]}
+[1;33mTesting:[0m Search physics - resistance
+Request: Search physics - resistance
+Response: {"query":"resistance","count":3,"questions":[{"question_id":"9702_w22_qp_13_37","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":37,"text_length":2151,"num_images":5,"has_images":true,"text_preview":"A cell E, of electromotive force (e.m.f.) 2 V and negligible internal resistance, is connected to a\n    uniform resistance wire of resistance 10 Ω and length 1.0 m.\n\nSummary : This is a labeled circui...","image_paths":["p1_images/9702_w22_qp_13/9702_w22_qp_13_20250728_152744/page_15/ChunkType.text_d640bb41-4725-4a88-b57a-8b546768d0c1_0.png","p1_images/9702_w22_qp_13/9702_w22_qp_13_20250728_152744/page_15/ChunkType.figure_1ebdcefe-b168-480e-a4c2-2a83b611d82f_0.png","p1_images/9702_w22_qp_13/9702_w22_qp_13_20250728_152744/page_15/ChunkType.text_e908e13f-2e71-43ee-804a-26d2bed39777_0.png","p1_images/9702_w22_qp_13/9702_w22_qp_13_20250728_152744/page_15/ChunkType.text_b85ebba9-8379-4d82-b9ce-e4377fa83f47_0.png","p1_images/9702_w22_qp_13/9702_w22_qp_13_20250728_152744/page_15/ChunkType.text_91f6559b-a07f-4832-b64f-3113ab1bdc8e_0.png"]},{"question_id":"9702_w15_qp_12_35","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":35,"text_length":2318,"num_images":2,"has_images":true,"text_preview":"A power supply of electromotive force (e.m.f.) 12 V and internal resistance 2 Ω is connected in\n     series with a load resistor. The resistance of the load resistor is varied from 0.5 Ω to 4 Ω.\n\nSumm...","image_paths":["p1_images/9702_w15_qp_12/9702_w15_qp_12_20250728_231819/page_13/ChunkType.text_74145860-b992-4eed-9f18-325ceca34d03_0.png","p1_images/9702_w15_qp_12/9702_w15_qp_12_20250728_231819/page_13/ChunkType.figure_05ea475a-f986-4a6b-808f-fa4b5e2384b5_0.png"]},{"question_id":"9702_s13_qp_12_5","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":5,"text_length":1657,"num_images":1,"has_images":true,"text_preview":"Summary : This figure presents a calibration curve for a thermistor, showing how its resistance varies with temperature, using a logarithmic scale for resistance.\n\nline plot:\nTitle & Axes :\n  • No exp...","image_paths":["p1_images/9702_s13_qp_12/9702_s13_qp_12_20250728_215733/page_1/ChunkType.figure_e6f9c247-7324-4787-a113-7c9d40df3718_0.png"]}]}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -166,7 +279,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Question details
 Request: Question details
-Response: {"internal_question_id":2743,"question_id":"9702_w06_qp_1_23","paper_id":58,"question_number":23,"images":["p1_images/9702_w06_qp_1/9702_w06_qp_1_20250728_223501/page_8/ChunkType.text_b4a2018c-f317-4830-a77e-1a804f6811aa_0.png"],"embedding_model":"text-embedding-3-large","embedding_created_at":null,"cluster_model_version":null,"text_length":93,"source_file":"9702_w06_qp_1_grouped_by_questions.json","ms":"C","is_active":true,"created_at":"2025-08-15T17:37:08.741061","updated_at":"2025-08-15T17:37:08.741066","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1","subject_name":"Physics"}
+Response: {"internal_question_id":3460,"question_id":"9702_m17_qp_12_20","paper_id":4,"question_number":20,"images":["p1_images/9702_m17_qp_12/9702_m17_qp_12_20250727_221235/page_6/ChunkType.text_8a5522fa-8876-4313-a76a-29893571e04c_0.png"],"embedding_model":"text-embedding-3-large","embedding_created_at":null,"cluster_model_version":null,"text_length":360,"source_file":"9702_m17_qp_12_grouped_by_questions.json","ms":"B","is_active":true,"created_at":"2025-08-15T17:37:15.446183","updated_at":"2025-08-15T17:37:15.446186","paper_name":"Paper 1 - Multiple Choice","paper_code":"P1","subject_name":"Physics"}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -177,7 +290,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Question timing stats
 Request: Question timing stats
-Response: {"question_id":"9702_w06_qp_1_23","timing_statistics":{"avg_time_seconds":0.06,"median_time_seconds":0.06,"attempt_count":1,"success_rate":1.0,"suggested_time_limit":0.12},"retrieved_at":1755266535.3051882}
+Response: {"question_id":"9702_m17_qp_12_20","timing_statistics":{"avg_time_seconds":0.06,"median_time_seconds":0.06,"attempt_count":1,"success_rate":0.0,"suggested_time_limit":0.12},"retrieved_at":1755274776.960949}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -185,7 +298,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Validate correct answer
 Request: Validate correct answer
-Response: {"question_id":"9702_w06_qp_1_23","validation_result":{"is_correct":true,"correct_answer":"C","student_answer":"C","validation_method":"exact_match","question_id":"9702_w06_qp_1_23"},"validated_at":1755266535.3472629}
+Response: {"question_id":"9702_m17_qp_12_20","validation_result":{"is_correct":false,"correct_answer":"B","student_answer":"C","validation_method":"exact_match","question_id":"9702_m17_qp_12_20"},"validated_at":1755274777.0040278}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -193,7 +306,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Validate incorrect answer
 Request: Validate incorrect answer
-Response: {"question_id":"9702_w06_qp_1_23","validation_result":{"is_correct":false,"correct_answer":"C","student_answer":"A","validation_method":"exact_match","question_id":"9702_w06_qp_1_23"},"validated_at":1755266535.3872561}
+Response: {"question_id":"9702_m17_qp_12_20","validation_result":{"is_correct":false,"correct_answer":"B","student_answer":"A","validation_method":"exact_match","question_id":"9702_m17_qp_12_20"},"validated_at":1755274777.044071}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -201,7 +314,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Get answer key
 Request: Get answer key
-Response: {"question_id":"9702_w06_qp_1_23","answer_key":{"question_id":"9702_w06_qp_1_23","correct_answer":"C","paper_name":"Paper 1 - Multiple Choice","question_text":"What is the unit of the Young modulus?\n\nA   Nm⁻¹        B   Nm        C   Nm⁻²        D   Nm²"},"timing_stats":{"avg_time_seconds":0.06,"median_time_seconds":0.06,"attempt_count":1,"success_rate":1.0,"suggested_time_limit":0.12},"retrieved_at":1755266535.434459}
+Response: {"question_id":"9702_m17_qp_12_20","answer_key":{"question_id":"9702_m17_qp_12_20","correct_answer":"B","paper_name":"Paper 1 - Multiple Choice","question_text":"Two wires X and Y are made of different metals. The Young modulus of wire X is twice that of wire Y. The diameter of wire X is half that of wire Y.\n\nThe wires are extended with the same strain and obey Hooke’s law.\n\nWhat is the ratio  tension in wire X\n                        tension in wire Y ?\n\nA   $\\frac{1}{8}$      B   $\\frac{1}{2}$      C   1      D   8"},"timing_stats":{"avg_time_seconds":0.06,"median_time_seconds":0.06,"attempt_count":1,"success_rate":0.0,"suggested_time_limit":0.12},"retrieved_at":1755274777.092062}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -231,7 +344,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Question image
 Request: Question image
-Response: {"question_id":"9702_w06_qp_1_23","images":["p1_images/9702_w06_qp_1/9702_w06_qp_1_20250728_223501/page_8/ChunkType.text_b4a2018c-f317-4830-a77e-1a804f6811aa_0.png"],"has_images":true,"render_url":"/questions/9702_w06_qp_1_23/render"}
+Response: {"question_id":"9702_m17_qp_12_20","images":["p1_images/9702_m17_qp_12/9702_m17_qp_12_20250727_221235/page_6/ChunkType.text_8a5522fa-8876-4313-a76a-29893571e04c_0.png"],"has_images":true,"render_url":"/questions/9702_m17_qp_12_20/render"}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -239,7 +352,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Question summary
 Request: Question summary
-Response: {"question_id":"9702_w06_qp_1_23","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":23,"text_length":93,"num_images":1,"has_images":true,"text_preview":"What is the unit of the Young modulus?\n\nA   Nm⁻¹        B   Nm        C   Nm⁻²        D   Nm²","image_paths":["p1_images/9702_w06_qp_1/9702_w06_qp_1_20250728_223501/page_8/ChunkType.text_b4a2018c-f317-4830-a77e-1a804f6811aa_0.png"]}
+Response: {"question_id":"9702_m17_qp_12_20","paper_code":"P1","paper_name":"Paper 1 - Multiple Choice","question_number":20,"text_length":360,"num_images":1,"has_images":true,"text_preview":"Two wires X and Y are made of different metals. The Young modulus of wire X is twice that of wire Y. The diameter of wire X is half that of wire Y.\n\nThe wires are extended with the same strain and obe...","image_paths":["p1_images/9702_m17_qp_12/9702_m17_qp_12_20250727_221235/page_6/ChunkType.text_8a5522fa-8876-4313-a76a-29893571e04c_0.png"]}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -250,7 +363,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Similar questions
 Request: Similar questions
-Response: {"question_id":"9702_w06_qp_1_23","similar_questions":[{"internal_question_id":2743,"question_id":"9702_w06_qp_1_23","combined_similarity_score":1.0,"openai_score":1.0,"umap_score":1.0,"cluster_score":1.0},{"internal_question_id":1181,"question_id":"9702_s13_qp_12_21","combined_similarity_score":0.9999208308796148,"openai_score":0.9998419880678711,"umap_score":0.9999991842283958,"cluster_score":1.0},{"internal_question_id":1939,"question_id":"9702_s19_qp_13_19","combined_similarity_score":0.8612620023631863,"openai_score":0.7225385208359141,"umap_score":0.9999637097261461,"cluster_score":1.0},{"internal_question_id":4022,"question_id":"9702_w16_qp_12_22","combined_similarity_score":0.8585527662216164,"openai_score":0.7171189661501377,"umap_score":0.9999664157327377,"cluster_score":1.0},{"internal_question_id":2659,"question_id":"9702_s22_qp_12_19","combined_similarity_score":0.8554787836533726,"openai_score":0.7109719091074533,"umap_score":0.9999641454982301,"cluster_score":1.0},{"internal_question_id":4540,"question_id":"9702_s17_qp_12_20","combined_similarity_score":0.8547663395363783,"openai_score":0.7095472850990877,"umap_score":0.9999634849341721,"cluster_score":1.0},{"internal_question_id":1661,"question_id":"9702_w03_qp_1_21","combined_similarity_score":0.8532043982917699,"openai_score":0.7064763518117774,"umap_score":0.9998311119294059,"cluster_score":1.0},{"internal_question_id":941,"question_id":"9702_w24_qp_12_21","combined_similarity_score":0.8528247015596928,"openai_score":0.7056662685473335,"umap_score":0.9999578364301299,"cluster_score":1.0},{"internal_question_id":1761,"question_id":"9702_w16_qp_11_1","combined_similarity_score":0.8463913006084172,"openai_score":0.6927929473889675,"umap_score":0.9999741345696671,"cluster_score":1.0},{"internal_question_id":521,"question_id":"9702_w16_qp_13_1","combined_similarity_score":0.8463741586071876,"openai_score":0.6927572535438505,"umap_score":0.9999776591763114,"cluster_score":1.0}],"similarity_threshold":0.7}
+Response: {"question_id":"9702_m17_qp_12_20","similar_questions":[{"internal_question_id":3460,"question_id":"9702_m17_qp_12_20","combined_similarity_score":1.0,"openai_score":1.0,"umap_score":1.0,"cluster_score":1.0},{"internal_question_id":667,"question_id":"9702_w12_qp_12_27","combined_similarity_score":0.9807236394955556,"openai_score":0.9614473673231341,"umap_score":0.9999997791699433,"cluster_score":1.0},{"internal_question_id":3220,"question_id":"9702_s19_qp_12_20","combined_similarity_score":0.9083375315352644,"openai_score":0.8166794290137762,"umap_score":0.999989085141881,"cluster_score":1.0},{"internal_question_id":1139,"question_id":"9702_s22_qp_11_19","combined_similarity_score":0.9068034427260752,"openai_score":0.8136078826422891,"umap_score":0.9999975070246527,"cluster_score":1.0},{"internal_question_id":4180,"question_id":"9702_s21_qp_12_20","combined_similarity_score":0.901825040259751,"openai_score":0.8036504989341648,"umap_score":0.9999989539633422,"cluster_score":1.0},{"internal_question_id":1620,"question_id":"9702_s09_qp_1_20","combined_similarity_score":0.8952822266868674,"openai_score":0.790565048523551,"umap_score":0.9999985121254592,"cluster_score":1.0},{"internal_question_id":2865,"question_id":"9702_w12_qp_11_25","combined_similarity_score":0.8877310260383022,"openai_score":0.7754658922830769,"umap_score":0.9999903994838183,"cluster_score":1.0},{"internal_question_id":3021,"question_id":"9702_w10_qp_12_21","combined_similarity_score":0.8872286225720936,"openai_score":0.7744577585358099,"umap_score":0.9999987165209429,"cluster_score":1.0},{"internal_question_id":2019,"question_id":"9702_m16_qp_12_19","combined_similarity_score":0.881888968611547,"openai_score":0.7637891595740968,"umap_score":0.9999719441224929,"cluster_score":1.0},{"internal_question_id":344,"question_id":"9702_s08_qp_1_24","combined_similarity_score":0.8803941295822015,"openai_score":0.7607959677212194,"umap_score":0.999980728607959,"cluster_score":1.0}],"similarity_threshold":0.7}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -261,7 +374,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Student cache invalidation
 Request: Student cache invalidation
-Response: {"message":"Invalidated True cache entries for student 20"}
+Response: {"message":"Invalidated 0 cache entries for student 20"}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -280,7 +393,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Fresh recommendations
 Request: Fresh recommendations
-Response: {"student_id":"20","objective":"balanced","recommendations":[{"question_id":"9702_w19_qp_13_19","internal_question_id":2939,"score":0.41316360121359824,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.413 alignment with learning path","paper_id":6},{"question_id":"9702_s18_qp_11_32","internal_question_id":3632,"score":0.41316360121359824,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.413 alignment with learning path","paper_id":24},{"question_id":"9702_s15_qp_13_24","internal_question_id":3344,"score":0.41316360121359824,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.413 alignment with learning path","paper_id":108}],"generated_at":1755266535.843342,"cache_hit":false,"response_time_ms":38.79499435424805}
+Response: {"student_id":"20","objective":"balanced","recommendations":[{"question_id":"9702_w20_qp_11_35","internal_question_id":1355,"score":0.45833333333333337,"primary_cluster":5,"cluster_strength":1.0,"reasoning":"ML-scored: 0.458 alignment with learning path","paper_id":64},{"question_id":"9702_s15_qp_13_37","internal_question_id":3357,"score":0.45833333333333337,"primary_cluster":5,"cluster_strength":1.0,"reasoning":"ML-scored: 0.458 alignment with learning path","paper_id":108},{"question_id":"9702_w14_qp_11_31","internal_question_id":4151,"score":0.45833333333333337,"primary_cluster":5,"cluster_strength":1.0,"reasoning":"ML-scored: 0.458 alignment with learning path","paper_id":36}],"generated_at":1755274777.506331,"cache_hit":false,"response_time_ms":37.53495216369629}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
@@ -288,7 +401,7 @@ Success: Valid JSON response received
 
 [1;33mTesting:[0m Cached recommendations
 Request: Cached recommendations
-Response: {"student_id":"20","objective":"balanced","recommendations":[{"question_id":"9702_w19_qp_13_19","internal_question_id":2939,"score":0.41316360121359824,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.413 alignment with learning path","paper_id":6},{"question_id":"9702_s18_qp_11_32","internal_question_id":3632,"score":0.41316360121359824,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.413 alignment with learning path","paper_id":24},{"question_id":"9702_s15_qp_13_24","internal_question_id":3344,"score":0.41316360121359824,"primary_cluster":4,"cluster_strength":1.0,"reasoning":"ML-scored: 0.413 alignment with learning path","paper_id":108}],"generated_at":1755266535.8764741,"cache_hit":true,"response_time_ms":0.2779960632324219}
+Response: {"student_id":"20","objective":"balanced","recommendations":[{"question_id":"9702_w20_qp_11_35","internal_question_id":1355,"score":0.45833333333333337,"primary_cluster":5,"cluster_strength":1.0,"reasoning":"ML-scored: 0.458 alignment with learning path","paper_id":64},{"question_id":"9702_s15_qp_13_37","internal_question_id":3357,"score":0.45833333333333337,"primary_cluster":5,"cluster_strength":1.0,"reasoning":"ML-scored: 0.458 alignment with learning path","paper_id":108},{"question_id":"9702_w14_qp_11_31","internal_question_id":4151,"score":0.45833333333333337,"primary_cluster":5,"cluster_strength":1.0,"reasoning":"ML-scored: 0.458 alignment with learning path","paper_id":36}],"generated_at":1755274777.541579,"cache_hit":true,"response_time_ms":0.25010108947753906}
 ---
 [0;32m✅ PASSED[0m
 Success: Valid JSON response received
