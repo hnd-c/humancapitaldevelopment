@@ -9,7 +9,6 @@ This module handles:
 
 from .vector_encoder import *
 from .transition_matrix import *
-from .embeddings import *
-from .similarity import *
+from .vector_operations_manager import *
 
 __version__ = "1.0.0"
