@@ -154,6 +154,7 @@ class PostgreSQLDataLoader:
             openai_embedding = None
             umap_embedding = None
             soft_cluster = None
+            umap_2d_embedding = None
 
             # Handle OpenAI embedding
             openai_val = row.get('openai_embedding')
@@ -179,6 +180,14 @@ class PostgreSQLDataLoader:
                 elif isinstance(cluster_val, (list, tuple)):
                     soft_cluster = self._clean_vector(list(cluster_val))
 
+            # Handle 2D UMAP embedding
+            umap_2d_val = row.get('umap_2d')
+            if umap_2d_val is not None and not (isinstance(umap_2d_val, float) and np.isnan(umap_2d_val)):
+                if hasattr(umap_2d_val, 'tolist'):
+                    umap_2d_embedding = self._clean_vector(umap_2d_val.tolist())
+                elif isinstance(umap_2d_val, (list, tuple)):
+                    umap_2d_embedding = self._clean_vector(list(umap_2d_val))
+
             # Convert images array to JSONB
             images_json = None
             images_val = row.get('images')
@@ -194,10 +203,10 @@ class PostgreSQLDataLoader:
             cursor.execute("""
                 INSERT INTO questions (
                     internal_question_id, question_id, paper_id, question_number, combined_text,
-                    images, openai_embedding, umap_embedding, soft_cluster, embedding_model,
+                    images, openai_embedding, umap_embedding, soft_cluster, umap_2d_embedding, embedding_model,
                     embedding_created_at, cluster_model_version, text_length, source_file,
                     ms, is_active, created_at, updated_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 int(row['internal_question_id']),
                 row['question_id'],
@@ -208,6 +217,7 @@ class PostgreSQLDataLoader:
                 openai_embedding,
                 umap_embedding,
                 soft_cluster,
+                umap_2d_embedding,
                 row.get('embedding_model', 'text-embedding-3-large'),
                 row.get('embedding_created_at'),
                 row.get('cluster_model_version'),
@@ -241,7 +251,7 @@ class PostgreSQLDataLoader:
 
         return cleaned
 
-    def load_questions_from_original_parquet(self, parquet_file: str = '../combined_questions.parquet') -> int:
+    def load_questions_from_original_parquet(self, parquet_file: str = '../combined_questions_2d.parquet') -> int:
         """Load questions directly from original parquet file (bypasses normalization issues)"""
         try:
             with psycopg2.connect(**self.db_params) as conn:
@@ -271,6 +281,7 @@ class PostgreSQLDataLoader:
                     openai_embedding = self._clean_vector(row['openai_embedding'].tolist()) if hasattr(row['openai_embedding'], 'tolist') else None
                     umap_embedding = self._clean_vector(row['umap_embedding'].tolist()) if hasattr(row['umap_embedding'], 'tolist') else None
                     soft_cluster = self._clean_vector(row['soft_cluster'].tolist()) if hasattr(row['soft_cluster'], 'tolist') else None
+                    umap_2d_embedding = self._clean_vector(row['umap_2d'].tolist()) if hasattr(row.get('umap_2d'), 'tolist') else None
 
                     # Convert images (simple approach)
                     images_json = None
@@ -288,9 +299,9 @@ class PostgreSQLDataLoader:
                     cursor.execute("""
                         INSERT INTO questions (
                             internal_question_id, question_id, paper_id, question_number, combined_text, images,
-                            openai_embedding, umap_embedding, soft_cluster, embedding_model,
+                            openai_embedding, umap_embedding, soft_cluster, umap_2d_embedding, embedding_model,
                             text_length, source_file, ms, is_active, created_at, updated_at
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         inserted + 1,  # Use sequential ID
                         row['question_id'],
@@ -301,6 +312,7 @@ class PostgreSQLDataLoader:
                         openai_embedding,
                         umap_embedding,
                         soft_cluster,
+                        umap_2d_embedding,
                         'text-embedding-3-large',
                         int(row.get('text_length', 0)) if pd.notna(row.get('text_length')) else None,
                         row.get('source_file', ''),
@@ -347,7 +359,8 @@ class PostgreSQLDataLoader:
                         COUNT(*) as total_questions,
                         COUNT(openai_embedding) as openai_count,
                         COUNT(umap_embedding) as umap_count,
-                        COUNT(soft_cluster) as cluster_count
+                        COUNT(soft_cluster) as cluster_count,
+                        COUNT(umap_2d_embedding) as umap_2d_count
                     FROM questions
                 """)
 
@@ -356,7 +369,8 @@ class PostgreSQLDataLoader:
                     'total_questions': vector_stats[0],
                     'openai_embeddings': vector_stats[1],
                     'umap_embeddings': vector_stats[2],
-                    'soft_clusters': vector_stats[3]
+                    'soft_clusters': vector_stats[3],
+                    'umap_2d_embeddings': vector_stats[4]
                 }
                 print(f"   🧠 Vector embeddings: {vector_stats[1]}/{vector_stats[0]} complete")
 
@@ -470,6 +484,7 @@ class PostgreSQLDataLoader:
                 print(f"   • OpenAI embeddings: {vs['openai_embeddings']:,}")
                 print(f"   • UMAP embeddings: {vs['umap_embeddings']:,}")
                 print(f"   • Soft clusters: {vs['soft_clusters']:,}")
+                print(f"   • 2D UMAP embeddings: {vs['umap_2d_embeddings']:,}")
 
             if load_stats['errors']:
                 print(f"\n⚠️  Errors encountered:")

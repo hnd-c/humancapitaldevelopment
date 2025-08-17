@@ -124,16 +124,16 @@ def create_normalized_schema(source_file="student_history_enhanced_20250812_0847
     # 9. QUESTIONS TABLE - Load ALL questions from parquet, not just practiced ones
     # ========================================
 
-    # Extract ALL question metadata from combined_questions.parquet
+    # Extract ALL question metadata from combined_questions_2d.parquet
     try:
-        questions_detail = pd.read_parquet('../combined_questions.parquet')
+        questions_detail = pd.read_parquet('../combined_questions_2d.parquet')
         questions_detail = questions_detail.reset_index(drop=True)
         questions_detail['question_id'] = (questions_detail['paper_number'].astype(str) + '_' +
                                          questions_detail['question_number'].astype(str))
 
         # Use ALL questions from parquet as the base (complete question bank)
         available_columns = ['question_id', 'paper_number', 'question_number', 'combined_text', 'images', 'source_file', 'ms',
-                           'openai_embedding', 'text_length', 'umap_embedding', 'soft_cluster']
+                           'openai_embedding', 'text_length', 'umap_embedding', 'soft_cluster', 'umap_2d']
 
         # Keep only columns that exist in parquet
         questions_columns = ['question_id', 'paper_number', 'question_number']
@@ -211,6 +211,8 @@ def create_normalized_schema(source_file="student_history_enhanced_20250812_0847
         questions['umap_embedding'] = None
     if 'soft_cluster' not in questions.columns:
         questions['soft_cluster'] = None
+    if 'umap_2d' not in questions.columns:
+        questions['umap_2d'] = None
     if 'text_length' not in questions.columns:
         questions['text_length'] = questions['combined_text'].str.len()
     if 'ms' not in questions.columns:
@@ -225,7 +227,7 @@ def create_normalized_schema(source_file="student_history_enhanced_20250812_0847
     questions['updated_at'] = datetime.now()
 
     questions = questions[['internal_question_id', 'question_id', 'paper_id', 'question_number',
-                          'combined_text', 'images', 'openai_embedding', 'umap_embedding', 'soft_cluster',
+                          'combined_text', 'images', 'openai_embedding', 'umap_embedding', 'soft_cluster', 'umap_2d',
                           'embedding_model', 'embedding_created_at', 'cluster_model_version',
                           'text_length', 'source_file', 'ms', 'is_active', 'created_at', 'updated_at']]
 
