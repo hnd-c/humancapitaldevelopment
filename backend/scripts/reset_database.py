@@ -86,7 +86,7 @@ def reset_database():
 
         print("📋 Step 4: Creating schema...")
 
-        # Apply schema
+        # Apply main schema
         with psycopg2.connect(**db_params) as conn:
             cursor = conn.cursor()
 
@@ -99,9 +99,35 @@ def reset_database():
 
             cursor.execute(schema_sql)
             conn.commit()
-            print("   ✅ Schema created")
+            print("   ✅ Main schema created")
 
-        print("🔍 Step 5: Verifying setup...")
+        print("📋 Step 5: Applying additional migrations...")
+
+        # Apply additional migrations in order
+        migrations_dir = Path("../database/migrations")
+        migration_files = sorted([
+            f for f in migrations_dir.glob("*.sql")
+            if f.name != "01_initial_schema.sql"  # Skip main schema (already applied)
+        ])
+
+        with psycopg2.connect(**db_params) as conn:
+            cursor = conn.cursor()
+
+            for migration_file in migration_files:
+                print(f"   📄 Applying {migration_file.name}...")
+                try:
+                    with open(migration_file, 'r') as f:
+                        migration_sql = f.read()
+
+                    cursor.execute(migration_sql)
+                    conn.commit()
+                    print(f"   ✅ {migration_file.name} applied successfully")
+
+                except Exception as e:
+                    print(f"   ❌ Error applying {migration_file.name}: {e}")
+                    raise
+
+        print("🔍 Step 6: Verifying setup...")
 
         # Verify everything
         with psycopg2.connect(**db_params) as conn:
@@ -134,10 +160,34 @@ def reset_database():
                 SELECT routine_name
                 FROM information_schema.routines
                 WHERE routine_schema = 'public'
-                AND routine_name LIKE 'find_similar%'
+                AND (routine_name LIKE 'find_similar%' OR routine_name LIKE '%student_status%' OR routine_name LIKE 'get_umap%')
             """)
             functions = [row[0] for row in cursor.fetchall()]
-            print(f"   🔧 Similarity functions: {len(functions)}")
+            print(f"   🔧 Functions: {len(functions)}")
+            for func in functions:
+                print(f"      • {func}")
+
+            # Check materialized views
+            cursor.execute("""
+                SELECT schemaname, matviewname
+                FROM pg_matviews
+                WHERE schemaname = 'public'
+            """)
+            matviews = cursor.fetchall()
+            print(f"   📊 Materialized views: {len(matviews)}")
+            for schema, view in matviews:
+                print(f"      • {view}")
+
+            # Check regular views
+            cursor.execute("""
+                SELECT table_name
+                FROM information_schema.views
+                WHERE table_schema = 'public'
+            """)
+            views = [row[0] for row in cursor.fetchall()]
+            print(f"   👁️ Views: {len(views)}")
+            for view in views:
+                print(f"      • {view}")
 
         print("\n🎉 DATABASE RESET COMPLETED SUCCESSFULLY!")
         print("=" * 50)
@@ -145,6 +195,8 @@ def reset_database():
         print("✅ Vector extensions installed")
         print("✅ 2D UMAP support ready")
         print("✅ All similarity functions available")
+        print("✅ Student-specific UMAP visualization ready")
+        print("✅ Real-time status tracking enabled")
         print()
         print("Next steps:")
         print("   1. python migrate_data.py     # Create normalized data")

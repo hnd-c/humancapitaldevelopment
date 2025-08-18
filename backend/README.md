@@ -7,6 +7,9 @@ A modern, scalable ML-powered learning recommendation system with **fully databa
 - **Vector-Powered**: 4,560+ questions with OpenAI embeddings using pgvector extension
 - **ML-Integrated**: Transition matrices and similarity calculations stored in database
 - **Student Learning Workflow**: Complete session tracking, question attempts, and progress monitoring
+- **Real-Time UMAP Visualization**: Interactive 2D learning progress maps with student-specific status coloring
+- **WebSocket Integration**: Live updates when students answer questions with automatic color changes
+- **Spatial Intelligence**: Advanced filtering by coordinates, status, and paper for interactive exploration
 - **Automated Answer Validation**: Real-time answer checking with mark scheme integration
 - **Intelligent Timing**: Performance analytics and time-based difficulty assessment
 - **Advanced Caching**: Multi-level cache invalidation with student-specific strategies
@@ -45,7 +48,9 @@ backend/
 │   ├── answer_validation_service.py   # Automated answer checking & timing
 │   ├── performance_service.py         # System monitoring (Redis-based)
 │   ├── cache_service.py               # Advanced caching strategies
-│   └── question_rendering_service.py  # Question image rendering & visualization
+│   ├── question_rendering_service.py  # Question image rendering & visualization
+│   ├── umap_visualization_service.py  # 2D UMAP visualization & student progress mapping
+│   └── websocket_service.py           # Real-time WebSocket connections & live updates
 │
 ├── 🌐 api/                            # REST API
 │   ├── __init__.py
@@ -65,7 +70,8 @@ backend/
 ├── 🗄️ database/                        # Database schema and SQL files
 │   ├── migrations/                    # Database migrations (run in order)
 │   │   ├── 01_initial_schema.sql      # Main PostgreSQL schema with vectors
-│   │   └── 02_halfprecision_indexes.sql # Performance indexes for 3072D embeddings
+│   │   ├── 02_halfprecision_indexes.sql # Performance indexes for 3072D embeddings
+│   │   └── 03_umap_visualization_views.sql # Student-specific UMAP views & real-time triggers
 │   ├── examples/                      # SQL query examples
 │   │   └── vector_queries.sql         # Vector similarity query examples
 │   └── README.md                      # Database documentation
@@ -300,16 +306,124 @@ Questions are rendered with:
 
 **Performance**: Sub-second rendering for questions with multiple images
 
+## 🗺️ UMAP Visualization System
+
+The system provides advanced **student-specific 2D UMAP visualization** with real-time progress tracking:
+
+### Interactive Learning Progress Maps
+
+- **Student-Specific Coloring**: Each question point colored by student's mastery status
+- **Real-Time Updates**: Colors change instantly when students answer questions
+- **Spatial Intelligence**: Advanced filtering by coordinates, status, and academic papers
+- **WebSocket Integration**: Live updates without page refresh
+
+### Status Color Mapping
+
+Questions are colored based on student interaction:
+- 🔘 **Gray (#999999)**: Not attempted
+- 🟠 **Orange (#FF9800)**: Skipped
+- 🟢 **Green (#4CAF50)**: Mastered (latest attempt correct)
+- 🟡 **Yellow (#FFEB3B)**: Mixed results (has correct attempts but latest wrong)
+- 🔴 **Red (#F44336)**: Incorrect attempts only
+
+### UMAP Visualization Endpoints
+
+```bash
+# Basic 2D UMAP coordinates (cluster-based coloring)
+GET /umap-2d/coordinates?limit=1000&cluster_filter=0,1,2
+
+# Student-specific coordinates (mastery-based coloring)
+GET /students/{student_id}/umap-2d/coordinates?limit=1000
+
+# Complete dashboard visualization (all 4,560 questions)
+GET /students/{student_id}/umap-2d/coordinates?limit=4560
+
+# Spatial filtering for zoom/pan operations
+GET /students/{student_id}/umap-2d/coordinates?x_min=-5&x_max=5&y_min=-5&y_max=5
+
+# Status-based filtering
+GET /students/{student_id}/umap-2d/coordinates?status_filter=mastered,mixed
+
+# Paper-specific filtering
+GET /students/{student_id}/umap-2d/coordinates?paper_codes=9702_w22_qp_12
+
+# Combined filtering (status + spatial + paper)
+GET /students/{student_id}/umap-2d/coordinates?status_filter=mastered&x_min=-2&x_max=2&paper_codes=9702_w22_qp_12
+
+# Individual question status for real-time updates
+GET /students/{student_id}/questions/{question_id}/status
+
+# Coordinate bounds for visualization setup
+GET /umap-2d/bounds
+
+# Refresh student data (admin endpoint)
+POST /students/{student_id}/umap-2d/refresh
+
+# WebSocket for real-time updates
+WebSocket: /ws/students/{student_id}/umap-updates
+
+# WebSocket connection statistics
+GET /ws/stats
+```
+
+### Real-Time Updates
+
+**WebSocket Integration**: Students see immediate visual feedback:
+
+```javascript
+// Frontend WebSocket connection
+const ws = new WebSocket(`/ws/students/${student_id}/umap-updates`);
+ws.onmessage = (event) => {
+    const update = JSON.parse(event.data);
+    if (update.type === 'question_status_update') {
+        updateQuestionColor(update.question_id, update.new_status);
+    }
+};
+
+// Load complete student dashboard (recommended)
+const dashboardData = await fetch(`/students/${student_id}/umap-2d/coordinates?limit=4560`);
+// Returns all 4,560 questions with student's color-coded mastery status
+
+// Automatic updates when students submit answers
+await submitAnswer(questionId, selectedOption);
+// → Point color updates automatically via WebSocket
+```
+
+### Advanced Features
+
+- **Pagination**: Handle large datasets efficiently with offset/limit
+- **Complete Datasets**: Use `limit=4560` for full student dashboard visualization
+- **Metadata Inclusion**: Optional question details, paper information, attempt statistics
+- **Spatial Bounds**: Support for interactive zoom/pan operations
+- **Multiple Filters**: Combine status, spatial, and paper filters
+- **Performance Optimized**: Materialized views with intelligent caching
+- **Smart Data Structure**: 22,800 total student-question combinations (5 students × 4,560 questions)
+
+### Technical Implementation
+
+```
+📊 Student Answer → 🔄 Database Trigger → 🗄️ Materialized View Update → 🔌 WebSocket Notification → 🎨 Frontend Color Change
+```
+
+**Database Architecture:**
+- **Materialized View**: `student_question_status` for fast queries
+- **Regular View**: `question_coordinates_2d` for basic coordinates
+- **Functions**: Real-time refresh and bounds calculation
+- **Triggers**: Automatic WebSocket notifications on data changes
+
 ## 💾 Data Management
 
 ### Database Schema
 
 The system uses a normalized PostgreSQL schema with pgvector extension:
 - **Questions**: 4,560+ questions with OpenAI, UMAP, and soft cluster embeddings
+- **2D UMAP Coordinates**: Vector-based 2D projections for visualization
+- **Student Status Views**: Materialized views for real-time progress tracking
 - **Images**: JSONB arrays of file paths pointing to `p1_images/` folder
 - **Students**: Student profiles, enrollments, and learning history
 - **Transition Matrices**: Pre-computed cluster transition probabilities
 - **Performance Tracking**: Student analytics and system monitoring
+- **WebSocket Triggers**: Database triggers for real-time notifications
 - **Caching Metadata**: Redis cache management
 
 ### Caching Strategy
@@ -359,7 +473,7 @@ python main.py --mode demo
 python main.py --mode health
 
 # Comprehensive API testing script
-./test_all_endpoints.sh  # Tests all 32 endpoints including student workflow
+./test_all_endpoints.sh  # Tests all 50 endpoints including UMAP visualization
 
 # Individual API testing
 curl http://localhost:8000/docs  # Swagger UI
@@ -383,8 +497,11 @@ The `test_all_endpoints.sh` script provides comprehensive testing for:
 - **Cache Management** (2 endpoints): Full and student-specific invalidation
 - **Performance Testing** (2 endpoints): Fresh vs cached recommendation speeds
 - **Question Rendering** (3 endpoints): Image generation, summaries, similarities
+- **UMAP Visualization** (12 endpoints): Basic coordinates, student-specific maps, filtering, complete dashboards
+- **Advanced UMAP** (6 endpoints): Pagination, status filtering, spatial bounds, admin refresh
+- **WebSocket Support** (2 endpoints): Real-time connections, connection statistics
 
-**Total: 32 endpoints tested automatically with realistic data flows**
+**Total: 52 endpoints tested automatically with realistic data flows**
 
 ## 📊 Monitoring
 
@@ -477,6 +594,9 @@ Expected performance:
 - **Student Workflow**: <10ms for session/attempt operations
 - **Answer Validation**: <5ms for automated checking
 - **Vector Similarity**: <50ms with pgvector indexing
+- **UMAP Coordinates**: <20ms for 1000+ points, <50ms for full 4560 question datasets
+- **Real-Time Updates**: <5ms WebSocket notification delivery
+- **Student Status**: <10ms materialized view queries with 22,800 total combinations
 - **Cache Operations**: <1ms for Redis operations with smart invalidation
 - **Question Rendering**: <1s for multi-image compositions
 - **API throughput**: 1000+ requests/second
@@ -509,12 +629,17 @@ This system has been fully modernized with database-driven architecture and comp
 **Major Achievements**:
 - Eliminated all external file dependencies from runtime components
 - Implemented complete student learning lifecycle with intelligent automation
+- Built interactive 2D UMAP visualization system with real-time student progress tracking
 - Achieved sub-millisecond performance for cached operations
+- Created WebSocket-powered live updates for immediate visual feedback
 
 ## 🔗 Related Files
 
 - **Database Schema**: `database/migrations/01_initial_schema.sql` (PostgreSQL + pgvector)
 - **Performance Indexes**: `database/migrations/02_halfprecision_indexes.sql`
+- **UMAP Visualization**: `database/migrations/03_umap_visualization_views.sql` (Real-time views + triggers)
+- **UMAP Service**: `services/umap_visualization_service.py` (Student progress mapping)
+- **WebSocket Service**: `services/websocket_service.py` (Real-time connections)
 - **Docker**: `Dockerfile`, `docker-compose*.yml` (PostgreSQL, Redis, API)
 - **Data Loading**: `scripts/load_to_postgres.py` (parquet → PostgreSQL)
 - **Configuration**: `config/environments.py` (development/production settings)

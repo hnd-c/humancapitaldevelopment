@@ -198,9 +198,9 @@ test_endpoint "Questions by paper" "$response" "Ensure paper_id exists and quest
 echo -e "\n🖼️ Question Rendering" | tee -a output_api.txt
 echo "----------------------------" | tee -a output_api.txt
 
-# Test 26: Question image
-response=$(curl -s "$BASE_URL/questions/$FIRST_QUESTION/image" 2>/dev/null)
-test_endpoint "Question image" "$response" "Check image processing service. Verify p1_images directory structure"
+# Test 26: Question rendering
+response=$(curl -s "$BASE_URL/questions/$FIRST_QUESTION/render" 2>/dev/null)
+test_endpoint "Question rendering" "$response" "Check image processing service. Verify p1_images directory structure and rendering endpoint"
 
 # Test 27: Question summary
 response=$(curl -s "$BASE_URL/questions/$FIRST_QUESTION/summary" 2>/dev/null)
@@ -239,6 +239,98 @@ response=$(curl -s -X POST "$BASE_URL/recommendations" \
   -d '{"student_id": "20", "objective": "balanced", "top_k": 3}' 2>/dev/null)
 test_endpoint "Cached recommendations" "$response" "Verify caching improves response times"
 
+echo -e "\n🗺️ UMAP Visualization Endpoints" | tee -a output_api.txt
+echo "----------------------------" | tee -a output_api.txt
+
+# Test 33: Basic 2D UMAP coordinates
+response=$(curl -s "$BASE_URL/umap-2d/coordinates?limit=100" 2>/dev/null)
+test_endpoint "Basic 2D UMAP coordinates" "$response" "Check if umap_2d_embedding column exists in questions table. Run migration 03_umap_visualization_views.sql"
+
+# Test 34: UMAP coordinates with cluster filter
+response=$(curl -s "$BASE_URL/umap-2d/coordinates?cluster_filter=0,1,2&limit=50" 2>/dev/null)
+test_endpoint "UMAP coordinates with cluster filter" "$response" "Verify soft_cluster data exists in questions table and cluster filtering works"
+
+# Test 35: UMAP coordinates with spatial bounds
+response=$(curl -s "$BASE_URL/umap-2d/coordinates?x_min=-10&x_max=10&y_min=-10&y_max=10&limit=100" 2>/dev/null)
+test_endpoint "UMAP coordinates with spatial bounds" "$response" "Check spatial filtering logic and coordinate ranges"
+
+# Test 36: UMAP coordinates with metadata
+response=$(curl -s "$BASE_URL/umap-2d/coordinates?include_metadata=true&limit=50" 2>/dev/null)
+test_endpoint "UMAP coordinates with metadata" "$response" "Verify question metadata inclusion works properly"
+
+# Test 37: Student-specific UMAP coordinates
+response=$(curl -s "$BASE_URL/students/1/umap-2d/coordinates?limit=100" 2>/dev/null)
+test_endpoint "Student-specific UMAP coordinates" "$response" "Check if student_question_status materialized view exists. Verify 03_umap_visualization_views.sql migration"
+
+# Test 37a: Complete student dashboard (all questions)
+response=$(curl -s "$BASE_URL/students/1/umap-2d/coordinates?limit=4560" 2>/dev/null)
+test_endpoint "Complete student dashboard" "$response" "Test full dataset retrieval (all 4,560 questions) for complete dashboard visualization"
+
+# Test 38: Student UMAP with status filter
+response=$(curl -s "$BASE_URL/students/1/umap-2d/coordinates?status_filter=mastered,mixed&limit=50" 2>/dev/null)
+test_endpoint "Student UMAP with status filter" "$response" "Verify student question status calculation logic and filtering"
+
+# Test 39: Student UMAP with paper filter
+response=$(curl -s "$BASE_URL/students/1/umap-2d/coordinates?paper_codes=9702_w22_qp_12&limit=50" 2>/dev/null)
+test_endpoint "Student UMAP with paper filter" "$response" "Check paper filtering functionality and paper_code mapping"
+
+# Test 40: Student UMAP with metadata
+response=$(curl -s "$BASE_URL/students/1/umap-2d/coordinates?include_metadata=true&limit=50" 2>/dev/null)
+test_endpoint "Student UMAP with metadata" "$response" "Verify comprehensive metadata inclusion in student-specific coordinates"
+
+# Test 41: Student UMAP with spatial filtering
+response=$(curl -s "$BASE_URL/students/1/umap-2d/coordinates?x_min=-5&x_max=5&y_min=-5&y_max=5&limit=100" 2>/dev/null)
+test_endpoint "Student UMAP with spatial filtering" "$response" "Check spatial bounds filtering for student-specific coordinates"
+
+# Test 42: UMAP coordinate bounds
+response=$(curl -s "$BASE_URL/umap-2d/bounds" 2>/dev/null)
+test_endpoint "UMAP coordinate bounds" "$response" "Verify get_umap_bounds() function exists and returns proper coordinate ranges"
+
+# Test 43: Individual question status for student
+response=$(curl -s "$BASE_URL/students/1/questions/$FIRST_QUESTION/status" 2>/dev/null)
+test_endpoint "Individual question status" "$response" "Check question status retrieval for specific student-question pair"
+
+# Test 44: Refresh student UMAP status (admin endpoint)
+response=$(curl -s -X POST "$BASE_URL/students/1/umap-2d/refresh" 2>/dev/null)
+test_endpoint "Refresh student UMAP status" "$response" "Verify materialized view refresh functionality and admin endpoint access"
+
+echo -e "\n🔌 WebSocket Testing" | tee -a output_api.txt
+echo "----------------------------" | tee -a output_api.txt
+
+# Test 45: WebSocket connection stats
+response=$(curl -s "$BASE_URL/ws/stats" 2>/dev/null)
+test_endpoint "WebSocket connection stats" "$response" "Check WebSocket service initialization and connection tracking"
+
+# Note: WebSocket real-time endpoints (/ws/students/{student_id}/umap-updates) require special testing
+# and cannot be tested with simple curl commands. Use WebSocket testing tools for these endpoints.
+
+echo -e "\n📊 Advanced UMAP Features" | tee -a output_api.txt
+echo "----------------------------" | tee -a output_api.txt
+
+# Test 46: Student UMAP with pagination
+response=$(curl -s "$BASE_URL/students/2/umap-2d/coordinates?offset=0&limit=25" 2>/dev/null)
+test_endpoint "Student UMAP pagination (page 1)" "$response" "Verify pagination works correctly for large datasets"
+
+# Test 47: Student UMAP second page
+response=$(curl -s "$BASE_URL/students/2/umap-2d/coordinates?offset=25&limit=25" 2>/dev/null)
+test_endpoint "Student UMAP pagination (page 2)" "$response" "Check pagination offset handling and data consistency"
+
+# Test 48: Multiple status filters
+response=$(curl -s "$BASE_URL/students/1/umap-2d/coordinates?status_filter=not_attempted,skipped,incorrect&limit=100" 2>/dev/null)
+test_endpoint "Multiple status filters" "$response" "Test complex status filtering with multiple values"
+
+# Test 49: Combined filters (status + spatial + paper)
+response=$(curl -s "$BASE_URL/students/1/umap-2d/coordinates?status_filter=mastered&x_min=-2&x_max=2&paper_codes=9702_w22_qp_12&limit=50" 2>/dev/null)
+test_endpoint "Combined filters test" "$response" "Verify multiple filter types work together correctly"
+
+# Test 50: Empty results handling
+response=$(curl -s "$BASE_URL/students/999/umap-2d/coordinates?limit=10" 2>/dev/null)
+test_endpoint "Non-existent student UMAP" "$response" "Check graceful handling of non-existent student IDs"
+
+# Test 51: Complete dashboard performance (large dataset)
+response=$(curl -s "$BASE_URL/students/2/umap-2d/coordinates?limit=4560" 2>/dev/null)
+test_endpoint "Complete dashboard performance" "$response" "Test performance with full 4,560 question dataset for dashboard visualization"
+
 echo -e "\n" | tee -a output_api.txt
 echo "==============================" | tee -a output_api.txt
 echo "🏁 TEST RESULTS SUMMARY" | tee -a output_api.txt
@@ -260,8 +352,11 @@ if [ ${#FAILED_TESTS[@]} -gt 0 ]; then
     echo "2. Check database connection in config/environments.py" | tee -a output_api.txt
     echo "3. Verify Redis is running: redis-server" | tee -a output_api.txt
     echo "4. Run database migrations: check database/migrations/" | tee -a output_api.txt
-    echo "5. Install missing dependencies: pip install -r requirements.txt" | tee -a output_api.txt
-    echo "6. Check system health: python main.py --mode health" | tee -a output_api.txt
+    echo "5. Apply UMAP migration: psql -d human_capital_dev -f database/migrations/03_umap_visualization_views.sql" | tee -a output_api.txt
+    echo "6. Refresh materialized views: REFRESH MATERIALIZED VIEW student_question_status;" | tee -a output_api.txt
+    echo "7. Check 2D UMAP data: SELECT COUNT(*) FROM questions WHERE umap_2d_embedding IS NOT NULL;" | tee -a output_api.txt
+    echo "8. Install missing dependencies: pip install -r requirements.txt" | tee -a output_api.txt
+    echo "9. Check system health: python main.py --mode health" | tee -a output_api.txt
 fi
 
 if [ $FAILED -eq 0 ]; then
@@ -281,6 +376,12 @@ echo "• Image processing and rendering" | tee -a output_api.txt
 echo "• Vector similarity matching" | tee -a output_api.txt
 echo "• Cache management and optimization" | tee -a output_api.txt
 echo "• Paper and content organization" | tee -a output_api.txt
+echo "• 2D UMAP visualization coordinates" | tee -a output_api.txt
+echo "• Student-specific question status mapping" | tee -a output_api.txt
+echo "• Real-time WebSocket connections" | tee -a output_api.txt
+echo "• Spatial and status-based filtering" | tee -a output_api.txt
+echo "• Interactive learning progress visualization" | tee -a output_api.txt
+echo "• Complete dashboard performance testing (4,560 questions)" | tee -a output_api.txt
 
 echo "==============================" | tee -a output_api.txt
 echo "📄 Full detailed results saved to: output_api.txt" | tee -a output_api.txt

@@ -10,7 +10,7 @@ import json
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
@@ -24,7 +24,10 @@ from api.schemas import (
     QuestionAttemptRequest, QuestionAttemptResponse,
     AnswerSubmissionRequest, AnswerSubmissionResponse,
     RandomQuestionsResponse, QuestionSearchResponse,
-    QuestionDetailsResponse
+    QuestionDetailsResponse,
+    # UMAP Visualization schemas
+    QuestionStatusEnum, UMAPBoundsResponse,
+    StudentUMAPResponse, BasicUMAPResponse, QuestionStatusResponse
 )
 # Import data models for consistent response handling
 from data.models import (
@@ -614,7 +617,7 @@ async def submit_student_answer(
         cache_service = CacheService(system.db_manager.redis_client, system.db_manager)
         interaction_service = StudentInteractionService(system.db_manager, cache_service)
 
-        submission_data = interaction_service.submit_answer(
+        submission_data = await interaction_service.submit_answer(
             attempt_id=request.attempt_id,
             student_id=student_id,
             question_id=request.question_id,
@@ -1301,6 +1304,245 @@ async def get_questions_by_paper(
         raise HTTPException(status_code=500, detail=f"Error getting questions for paper {paper_code}: {str(e)}")
 
 
+# =====================================================
+# UMAP VISUALIZATION ENDPOINTS
+# =====================================================
+
+@app.get("/umap-2d/coordinates", response_model=BasicUMAPResponse,
+         summary="Get basic 2D UMAP coordinates",
+         description="Get all 2D UMAP coordinates with optional cluster filtering")
+async def get_umap_coordinates(
+    cluster_filter: Optional[List[int]] = Query(None, description="Filter by cluster IDs"),
+    x_min: Optional[float] = Query(None, description="Minimum X coordinate"),
+    x_max: Optional[float] = Query(None, description="Maximum X coordinate"),
+    y_min: Optional[float] = Query(None, description="Minimum Y coordinate"),
+    y_max: Optional[float] = Query(None, description="Maximum Y coordinate"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(2000, ge=1, le=5000, description="Number of results"),
+    include_metadata: bool = Query(False, description="Include question metadata"),
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Get basic 2D UMAP coordinates for general visualization (cluster-based)"""
+    try:
+        from services.umap_visualization_service import UMAPVisualizationService
+
+        umap_service = UMAPVisualizationService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        spatial_bounds = None
+        if any(coord is not None for coord in [x_min, x_max, y_min, y_max]):
+            spatial_bounds = (x_min, x_max, y_min, y_max)
+
+        result = await umap_service.get_basic_coordinates(
+            cluster_filter=cluster_filter,
+            spatial_bounds=spatial_bounds,
+            offset=offset,
+            limit=limit,
+            include_metadata=include_metadata
+        )
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get UMAP coordinates: {e}")
+
+
+@app.get("/students/{student_id}/umap-2d/coordinates", response_model=StudentUMAPResponse,
+         summary="Get student-specific 2D UMAP coordinates",
+         description="Get 2D UMAP coordinates colored by student's mastery status")
+async def get_student_umap_coordinates(
+    student_id: str,
+
+    # Filtering options
+    status_filter: Optional[List[QuestionStatusEnum]] = Query(None, description="Filter by question status"),
+    paper_codes: Optional[List[str]] = Query(None, description="Filter by paper codes"),
+
+    # Spatial filtering (for zoom/pan)
+    x_min: Optional[float] = Query(None, description="Minimum X coordinate"),
+    x_max: Optional[float] = Query(None, description="Maximum X coordinate"),
+    y_min: Optional[float] = Query(None, description="Minimum Y coordinate"),
+    y_max: Optional[float] = Query(None, description="Maximum Y coordinate"),
+
+    # Pagination
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(2000, ge=1, le=5000, description="Number of results"),
+
+    # Response options
+    include_metadata: bool = Query(False, description="Include question numbers, paper codes"),
+    include_attempt_details: bool = Query(False, description="Include detailed attempt information"),
+
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """
+    Get 2D UMAP coordinates with student-specific question status coloring
+
+    **Status Colors:**
+    - 🔘 Gray (#999999): Not attempted
+    - 🟠 Orange (#FF9800): Skipped
+    - 🟢 Green (#4CAF50): Mastered (latest correct)
+    - 🟡 Yellow (#FFEB3B): Mixed (has correct but latest wrong)
+    - 🔴 Red (#F44336): Incorrect only
+    """
+    try:
+        from services.umap_visualization_service import UMAPVisualizationService
+
+        umap_service = UMAPVisualizationService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        spatial_bounds = None
+        if any(coord is not None for coord in [x_min, x_max, y_min, y_max]):
+            spatial_bounds = (x_min, x_max, y_min, y_max)
+
+        result = await umap_service.get_student_coordinates(
+            student_id=student_id,
+            status_filter=status_filter,
+            paper_codes=paper_codes,
+            spatial_bounds=spatial_bounds,
+            offset=offset,
+            limit=limit,
+            include_metadata=include_metadata,
+            include_attempt_details=include_attempt_details
+        )
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get student coordinates: {e}")
+
+
+@app.get("/students/{student_id}/questions/{question_id}/status", response_model=QuestionStatusResponse,
+         summary="Get question status for student",
+         description="Get current status of a specific question for real-time updates")
+async def get_question_status_for_student(
+    student_id: str,
+    question_id: str,
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Get current status of a specific question for a student"""
+    try:
+        from services.umap_visualization_service import UMAPVisualizationService
+
+        umap_service = UMAPVisualizationService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        result = await umap_service.get_question_status(student_id, question_id)
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get question status: {e}")
+
+
+@app.get("/umap-2d/bounds", response_model=UMAPBoundsResponse,
+         summary="Get UMAP coordinate bounds",
+         description="Get coordinate bounds for visualization setup")
+async def get_umap_bounds(
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Get UMAP coordinate bounds for visualization setup"""
+    try:
+        from services.umap_visualization_service import UMAPVisualizationService
+
+        umap_service = UMAPVisualizationService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        bounds = await umap_service.get_umap_bounds()
+
+        return {
+            "x_min": bounds.x_min,
+            "x_max": bounds.x_max,
+            "y_min": bounds.y_min,
+            "y_max": bounds.y_max,
+            "center_x": bounds.center_x,
+            "center_y": bounds.center_y
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get UMAP bounds: {e}")
+
+
+@app.post("/students/{student_id}/umap-2d/refresh",
+          summary="Refresh student status data",
+          description="Refresh materialized view data for a specific student")
+async def refresh_student_umap_status(
+    student_id: str,
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Refresh materialized view data for a specific student (admin/debug endpoint)"""
+    try:
+        from services.umap_visualization_service import UMAPVisualizationService
+
+        umap_service = UMAPVisualizationService(
+            system.db_manager,
+            system.cache_manager
+        )
+
+        await umap_service.refresh_student_status(student_id)
+
+        return {
+            "message": f"Successfully refreshed status data for student {student_id}",
+            "timestamp": time.time()
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to refresh student status: {e}")
+
+
+# =====================================================
+# WEBSOCKET ENDPOINTS FOR REAL-TIME UPDATES
+# =====================================================
+
+@app.websocket("/ws/students/{student_id}/umap-updates")
+async def websocket_umap_updates(websocket: WebSocket, student_id: str):
+    """WebSocket endpoint for real-time UMAP visualization updates"""
+
+    from services.websocket_service import websocket_manager
+
+    # Accept connection
+    connection_success = await websocket_manager.connect(websocket, student_id)
+    if not connection_success:
+        return
+
+    try:
+        while True:
+            # Wait for messages from client
+            data = await websocket.receive_text()
+
+            # Handle the message
+            await websocket_manager.handle_message(student_id, websocket, data)
+
+    except WebSocketDisconnect:
+        websocket_manager.disconnect(websocket, student_id)
+    except Exception as e:
+        print(f"WebSocket error for student {student_id}: {e}")
+        websocket_manager.disconnect(websocket, student_id)
+
+
+@app.get("/ws/stats", summary="Get WebSocket connection statistics")
+async def get_websocket_stats(
+    system: HumanCapitalDevelopmentSystem = Depends(get_system)
+):
+    """Get WebSocket connection statistics (admin endpoint)"""
+    try:
+        from services.websocket_service import websocket_manager
+
+        stats = websocket_manager.get_connection_stats()
+
+        return {
+            "websocket_stats": stats,
+            "timestamp": time.time()
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get WebSocket stats: {e}")
 
 
 if __name__ == "__main__":

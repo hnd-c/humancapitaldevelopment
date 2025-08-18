@@ -79,15 +79,19 @@ CREATE TABLE subjects (
 CREATE TABLE papers (
     paper_id SERIAL PRIMARY KEY,
     subject_id INTEGER NOT NULL REFERENCES subjects(subject_id),
+    paper_number VARCHAR(50) NOT NULL,
     paper_key VARCHAR(50) NOT NULL,
     paper_name VARCHAR(255) NOT NULL,
+    full_paper_name VARCHAR(255),
     paper_code VARCHAR(10) NOT NULL,
     paper_description TEXT,
     paper_duration_minutes INTEGER NOT NULL,
     paper_max_marks INTEGER NOT NULL,
+    exam_session VARCHAR(10),
+    exam_year VARCHAR(10),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(subject_id, paper_key)
+    UNIQUE(subject_id, paper_number)
 );
 
 -- =====================================================
@@ -114,7 +118,7 @@ CREATE TABLE student_paper_enrollments (
     enrollment_id SERIAL PRIMARY KEY,
     student_id INTEGER NOT NULL REFERENCES students(student_id),
     paper_id INTEGER NOT NULL REFERENCES papers(paper_id),
-    paper_student_id VARCHAR(100) UNIQUE NOT NULL, -- Legacy ID for backward compatibility
+    paper_student_id VARCHAR(100) NOT NULL, -- Legacy ID for backward compatibility (allows duplicates)
     is_active BOOLEAN DEFAULT TRUE,
     enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(student_id, paper_id)
@@ -135,6 +139,7 @@ CREATE TABLE questions (
     openai_embedding vector(3072), -- OpenAI text-embedding-3-large (3072 dimensions)
     umap_embedding vector(50), -- UMAP 50D embeddings from your data
     soft_cluster vector(20), -- 20 cluster probabilities (fixed dimension)
+    umap_2d_embedding vector(2), -- 2D UMAP embeddings from your data
 
     -- EMBEDDING METADATA
     embedding_model VARCHAR(100) DEFAULT 'text-embedding-3-large',
@@ -144,7 +149,7 @@ CREATE TABLE questions (
 
     -- ADDITIONAL FIELDS FROM YOUR DATA
     source_file VARCHAR(255), -- Track which source file the question came from
-    ms NUMERIC(8,2), -- Milliseconds field from your data
+    ms VARCHAR(10), -- Mark scheme answer (A, B, C, D, etc.)
 
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -225,6 +230,8 @@ CREATE INDEX idx_questions_source_file ON questions(source_file);
 CREATE INDEX idx_questions_umap_cosine ON questions USING ivfflat (umap_embedding vector_cosine_ops) WITH (lists = 100);
 CREATE INDEX idx_questions_umap_l2 ON questions USING ivfflat (umap_embedding vector_l2_ops) WITH (lists = 100);
 CREATE INDEX idx_questions_cluster_cosine ON questions USING ivfflat (soft_cluster vector_cosine_ops) WITH (lists = 50);
+CREATE INDEX idx_questions_umap_2d_cosine ON questions USING ivfflat (umap_2d_embedding vector_cosine_ops) WITH (lists = 50);
+CREATE INDEX idx_questions_umap_2d_l2 ON questions USING ivfflat (umap_2d_embedding vector_l2_ops) WITH (lists = 50);
 
 -- History queries
 CREATE INDEX idx_history_enrollment ON student_question_history(enrollment_id);
@@ -294,6 +301,34 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Find similar questions using 2D UMAP embeddings
+CREATE OR REPLACE FUNCTION find_similar_questions_umap_2d(
+    query_umap_2d vector(2),
+    similarity_threshold float DEFAULT 0.5,
+    limit_count int DEFAULT 10
+)
+RETURNS TABLE(
+    internal_question_id integer,
+    question_id varchar(100),
+    similarity_score float,
+    x_coord float,
+    y_coord float
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT q.internal_question_id,
+           q.question_id,
+           1 - (q.umap_2d_embedding <=> query_umap_2d) as similarity_score,
+           (q.umap_2d_embedding::text::float[])[1] as x_coord,
+           (q.umap_2d_embedding::text::float[])[2] as y_coord
+    FROM questions q
+    WHERE q.umap_2d_embedding IS NOT NULL
+      AND 1 - (q.umap_2d_embedding <=> query_umap_2d) >= similarity_threshold
+    ORDER BY q.umap_2d_embedding <=> query_umap_2d
+    LIMIT limit_count;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Find similar questions using 20-cluster soft clustering
 CREATE OR REPLACE FUNCTION find_similar_questions_cluster(
     query_cluster vector(20),
@@ -312,7 +347,7 @@ BEGIN
            q.question_id,
            1 - (q.soft_cluster <=> query_cluster) as similarity_score,
            -- Get the dominant cluster (index of max probability)
-           (SELECT i-1 FROM unnest(q.soft_cluster) WITH ORDINALITY arr(val,i) ORDER BY val DESC LIMIT 1) as dominant_cluster
+           (SELECT i-1 FROM unnest(q.soft_cluster::real[]) WITH ORDINALITY arr(val,i) ORDER BY val DESC LIMIT 1) as dominant_cluster
     FROM questions q
     WHERE q.soft_cluster IS NOT NULL
       AND 1 - (q.soft_cluster <=> query_cluster) >= similarity_threshold
@@ -414,7 +449,7 @@ BEGIN
         (sq.similarity_score * 0.7 +
          (1 - ABS(COALESCE(qp.avg_success_rate, 0.5) - 0.6)) * 0.3) as recommendation_score,
         -- Get dominant cluster
-        (SELECT i-1 FROM unnest(q.soft_cluster) WITH ORDINALITY arr(val,i) ORDER BY val DESC LIMIT 1) as dominant_cluster
+        (SELECT i-1 FROM unnest(q.soft_cluster::real[]) WITH ORDINALITY arr(val,i) ORDER BY val DESC LIMIT 1) as dominant_cluster
     FROM similar_questions sq
     LEFT JOIN question_performance qp ON sq.internal_question_id = qp.internal_question_id
     LEFT JOIN questions q ON sq.internal_question_id = q.internal_question_id
@@ -440,10 +475,10 @@ BEGIN
     -- Update cluster statistics
     WITH cluster_stats AS (
         SELECT
-            (SELECT i-1 FROM unnest(soft_cluster) WITH ORDINALITY arr(val,i) ORDER BY val DESC LIMIT 1) as cluster_id,
+            (SELECT i-1 FROM unnest(soft_cluster::real[]) WITH ORDINALITY arr(val,i) ORDER BY val DESC LIMIT 1) as cluster_id,
             COUNT(*) as question_count,
             AVG(text_length) as avg_text_length,
-            ARRAY_AGG(question_id ORDER BY RANDOM() LIMIT 5) as sample_questions
+            ARRAY_AGG(question_id ORDER BY RANDOM()) as sample_questions
         FROM questions
         WHERE soft_cluster IS NOT NULL
         GROUP BY cluster_id
@@ -505,9 +540,9 @@ SELECT
     q.embedding_model,
     q.source_file,
     -- Get dominant cluster
-    (SELECT i-1 FROM unnest(q.soft_cluster) WITH ORDINALITY arr(val,i) ORDER BY val DESC LIMIT 1) as dominant_cluster,
+    (SELECT i-1 FROM unnest(q.soft_cluster::real[]) WITH ORDINALITY arr(val,i) ORDER BY val DESC LIMIT 1) as dominant_cluster,
     -- Get cluster confidence (max probability)
-    (SELECT MAX(val) FROM unnest(q.soft_cluster) arr(val)) as cluster_confidence,
+    (SELECT MAX(val) FROM unnest(q.soft_cluster::real[]) arr(val)) as cluster_confidence,
     COUNT(sqh.history_id) as total_attempts,
     COUNT(DISTINCT sqh.enrollment_id) as students_attempted,
     SUM(CASE WHEN sqh.is_correct THEN 1 ELSE 0 END) as correct_attempts,
@@ -528,14 +563,14 @@ ORDER BY success_rate ASC, avg_time_spent DESC;
 -- Cluster performance analysis view
 CREATE VIEW cluster_performance_analysis AS
 SELECT
-    (SELECT i-1 FROM unnest(q.soft_cluster) WITH ORDINALITY arr(val,i) ORDER BY val DESC LIMIT 1) as cluster_id,
+    (SELECT i-1 FROM unnest(q.soft_cluster::real[]) WITH ORDINALITY arr(val,i) ORDER BY val DESC LIMIT 1) as cluster_id,
     COUNT(DISTINCT q.internal_question_id) as question_count,
     COUNT(sqh.history_id) as total_attempts,
     COUNT(DISTINCT sqh.enrollment_id) as students_attempted,
     ROUND(AVG(CASE WHEN sqh.is_correct THEN 1.0 ELSE 0.0 END) * 100, 2) as avg_success_rate,
     ROUND(AVG(sqh.time_spent_sec), 2) as avg_time_spent,
     ROUND(AVG(q.text_length), 0) as avg_text_length,
-    ROUND(AVG((SELECT MAX(val) FROM unnest(q.soft_cluster) arr(val))), 3) as avg_cluster_confidence
+    ROUND(AVG((SELECT MAX(val) FROM unnest(q.soft_cluster::real[]) arr(val)))::numeric, 3) as avg_cluster_confidence
 FROM questions q
 LEFT JOIN student_question_history sqh ON q.internal_question_id = sqh.internal_question_id
 WHERE q.soft_cluster IS NOT NULL
@@ -707,6 +742,9 @@ $$ language 'plpgsql';
 
 -- Find similar questions using 50D UMAP embeddings
 -- SELECT * FROM find_similar_questions_umap('[1.89422726, 7.15444236, ...]'::vector(50), 0.5, 5);
+
+-- Find similar questions using 2D UMAP embeddings (for visualization)
+-- SELECT * FROM find_similar_questions_umap_2d('[5.2, -3.1]'::vector(2), 0.8, 10);
 
 -- Find questions in the same cluster as cluster 5 (largest cluster with 587 questions)
 -- SELECT * FROM find_similar_questions_cluster(

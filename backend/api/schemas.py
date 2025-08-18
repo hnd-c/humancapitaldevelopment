@@ -394,6 +394,91 @@ class QuestionDetailsResponse(BaseModel):
     subject_name: Optional[str] = None
 
 
+# UMAP Visualization Schemas
+class QuestionStatusEnum(str, Enum):
+    """Question status enumeration for visualization"""
+    NOT_ATTEMPTED = "not_attempted"
+    SKIPPED = "skipped"
+    MASTERED = "mastered"
+    MIXED = "mixed"
+    INCORRECT = "incorrect"
+
+
+class UMAPPoint(BaseModel):
+    """Individual UMAP coordinate point"""
+    question_id: str
+    x_coord: float
+    y_coord: float
+    status: Optional[QuestionStatusEnum] = None
+    color_code: Optional[str] = None
+    attempt_count: Optional[int] = None
+    correct_count: Optional[int] = None
+    latest_attempt_time: Optional[datetime] = None
+    latest_confidence: Optional[int] = None
+
+    # Optional metadata
+    question_number: Optional[int] = None
+    paper_code: Optional[str] = None
+    paper_name: Optional[str] = None
+    text_preview: Optional[str] = None
+    time_spent_total: Optional[float] = None
+    cluster_id: Optional[int] = None
+
+
+class UMAPBoundsResponse(BaseModel):
+    """UMAP coordinate bounds"""
+    x_min: float
+    x_max: float
+    y_min: float
+    y_max: float
+    center_x: float
+    center_y: float
+
+
+class PaginationInfo(BaseModel):
+    """Pagination information"""
+    offset: int
+    limit: int
+    total: int
+    has_more: bool
+
+
+class StatusLegend(BaseModel):
+    """Status color legend"""
+    color: str
+    label: str
+
+
+class StudentUMAPResponse(BaseModel):
+    """Response for student-specific UMAP coordinates"""
+    student_id: str
+    coordinates: List[UMAPPoint]
+    pagination: PaginationInfo
+    status_distribution: Dict[str, int]
+    status_legend: Dict[str, StatusLegend]
+    retrieved_at: float
+
+
+class BasicUMAPResponse(BaseModel):
+    """Response for basic UMAP coordinates"""
+    coordinates: List[UMAPPoint]
+    pagination: PaginationInfo
+    cluster_distribution: Dict[int, int]
+    retrieved_at: float
+
+
+class QuestionStatusResponse(BaseModel):
+    """Response for individual question status"""
+    status: QuestionStatusEnum
+    color_code: str
+    attempt_count: Optional[int] = None
+    correct_count: Optional[int] = None
+    latest_attempt_time: Optional[datetime] = None
+    latest_confidence: Optional[int] = None
+    x_coord: Optional[float] = None
+    y_coord: Optional[float] = None
+
+
 class RandomQuestionsResponse(BaseModel):
     """Response model for random questions"""
     count: int

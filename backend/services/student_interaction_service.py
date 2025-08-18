@@ -97,7 +97,7 @@ class StudentInteractionService:
             print(f"❌ Error starting question attempt: {e}")
             raise
 
-    def submit_answer(self, attempt_id: str, student_id: str, question_id: str,
+    async def submit_answer(self, attempt_id: str, student_id: str, question_id: str,
                      answer_text: Optional[str] = None, selected_option: Optional[str] = None,
                      is_correct: Optional[bool] = None, confidence_level: Optional[float] = None,
                      time_spent_seconds: Optional[float] = None, submission_method: str = "manual",
@@ -190,6 +190,12 @@ class StudentInteractionService:
             # Invalidate student cache since history changed
             self.cache_service.invalidate_student_cache(student_id)
             self.cache_service.set_student_cache_version(student_id)
+
+            # Trigger real-time UMAP status updates (non-blocking)
+            import asyncio
+            asyncio.create_task(
+                self._notify_umap_status_change(student_id, question_id, status, is_correct, metadata)
+            )
 
             # Generate feedback
             feedback = self._generate_feedback(is_correct, confidence_level, time_spent_seconds)
@@ -397,3 +403,86 @@ class StudentInteractionService:
                 return "Incorrect, but you seemed confident. Review the concept carefully."
             else:
                 return "Incorrect. Take time to understand the underlying concept."
+
+    async def _notify_umap_status_change(
+        self,
+        student_id: str,
+        question_id: str,
+        status: str,
+        is_correct: bool,
+        metadata: Optional[Dict[str, Any]] = None
+    ):
+        """Notify WebSocket connections about UMAP status changes"""
+        try:
+            from services.websocket_service import umap_notification_service
+
+            # Determine the visual status for UMAP
+            if status == 'skipped':
+                umap_status = 'skipped'
+            elif is_correct:
+                umap_status = 'mastered'  # Latest attempt is correct
+            else:
+                # Need to check if student has any previous correct attempts
+                umap_status = await self._determine_mixed_status(student_id, question_id)
+
+            additional_data = {
+                "confidence_level": metadata.get('confidence_level') if metadata else None,
+                "time_spent": metadata.get('time_spent_seconds') if metadata else None,
+                "device_type": metadata.get('device_type') if metadata else None
+            }
+
+            await umap_notification_service.notify_question_answered(
+                student_id=student_id,
+                question_id=question_id,
+                is_correct=is_correct,
+                status=umap_status,
+                additional_data=additional_data
+            )
+
+        except Exception as e:
+            # Don't fail the main operation if notification fails
+            print(f"Warning: Failed to send UMAP notification for student {student_id}, question {question_id}: {e}")
+
+    async def _determine_mixed_status(self, student_id: str, question_id: str) -> str:
+        """Determine if question status should be 'mixed' or 'incorrect'"""
+        try:
+            # Get enrollment_id for this student
+            with self.db_manager.get_db_connection() as conn:
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    SELECT enrollment_id FROM student_paper_enrollments
+                    WHERE student_id = %s AND is_active = TRUE
+                    LIMIT 1
+                """, [student_id])
+
+                result = cursor.fetchone()
+                if not result:
+                    return 'incorrect'
+
+                enrollment_id = result[0]
+
+                # Get internal_question_id
+                cursor.execute("""
+                    SELECT internal_question_id FROM questions
+                    WHERE question_id = %s
+                """, [question_id])
+
+                result = cursor.fetchone()
+                if not result:
+                    return 'incorrect'
+
+                internal_question_id = result[0]
+
+                # Check if student has any previous correct attempts
+                cursor.execute("""
+                    SELECT COUNT(*) FROM student_question_history
+                    WHERE enrollment_id = %s AND internal_question_id = %s AND is_correct = TRUE
+                """, [enrollment_id, internal_question_id])
+
+                correct_count = cursor.fetchone()[0]
+                return 'mixed' if correct_count > 0 else 'incorrect'
+
+        except Exception as e:
+            print(f"Error determining mixed status: {e}")
+            return 'incorrect'
