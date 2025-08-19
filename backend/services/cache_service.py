@@ -48,7 +48,32 @@ class CacheService:
         """Cache recommendations for a student and objective"""
         try:
             cache_key = f"recommendations:{student_id}:{objective}"
-            self.redis.setex(cache_key, ttl, json.dumps(recommendations, default=str))
+
+            # Convert Recommendation objects to dictionaries before caching
+            recommendations_for_cache = []
+            for rec in recommendations:
+                if hasattr(rec, '__dataclass_fields__'):
+                    # It's a dataclass - convert to dict
+                    import dataclasses
+                    rec_dict = dataclasses.asdict(rec)
+                    recommendations_for_cache.append(rec_dict)
+                elif isinstance(rec, dict):
+                    recommendations_for_cache.append(rec)
+                else:
+                    # Fallback - convert to dict manually
+                    rec_dict = {
+                        'question_id': getattr(rec, 'question_id', 'unknown'),
+                        'internal_question_id': getattr(rec, 'internal_question_id', 0),
+                        'paper_id': getattr(rec, 'paper_id', 0),
+                        'weighted_score': getattr(rec, 'weighted_score', 0.0),
+                        'dominant_cluster': getattr(rec, 'dominant_cluster', 0),
+                        'similarity_score': getattr(rec, 'similarity_score', None),
+                        'combined_score': getattr(rec, 'combined_score', None),
+                        'reasoning': getattr(rec, 'reasoning', None)
+                    }
+                    recommendations_for_cache.append(rec_dict)
+
+            self.redis.setex(cache_key, ttl, json.dumps(recommendations_for_cache))
             self.cache_stats['sets'] += 1
             return True
         except Exception as e:
@@ -325,6 +350,31 @@ class CacheService:
         except Exception as e:
             computation_stats['fatal_error'] = str(e)
             return computation_stats
+
+    async def delete_pattern(self, pattern: str) -> int:
+        """Delete cache keys matching a pattern"""
+        try:
+            keys = []
+            cursor = 0
+
+            # Use SCAN to find keys matching the pattern
+            while True:
+                cursor, partial_keys = self.redis.scan(cursor, match=pattern, count=100)
+                keys.extend(partial_keys)
+                if cursor == 0:
+                    break
+
+            # Delete the keys if any were found
+            if keys:
+                deleted_count = self.redis.delete(*keys)
+                self.cache_stats['deletes'] += deleted_count
+                return deleted_count
+
+            return 0
+
+        except Exception as e:
+            print(f"Error deleting cache pattern {pattern}: {e}")
+            return 0
 
     def intelligent_cache_invalidation(self, student_id: str, action: str = 'question_attempt') -> int:
         """Intelligently invalidate related caches based on user action"""

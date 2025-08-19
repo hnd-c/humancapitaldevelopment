@@ -18,18 +18,28 @@ class AnswerValidationService:
         self.db_manager = db_manager
 
     def get_question_answer_key(self, question_id: str) -> Optional[Dict[str, Any]]:
-        """Get the correct answer and mark scheme for a question"""
+        """Get the correct answer and mark scheme for a question - supports both question ID formats"""
         try:
             with self.db_manager.get_db_connection() as conn:
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-                # Get question with mark scheme data
-                cursor.execute("""
-                    SELECT q.question_id, q.ms, q.combined_text, p.paper_name
-                    FROM questions q
-                    JOIN papers p ON q.paper_id = p.paper_id
-                    WHERE q.question_id = %s
-                """, (question_id,))
+                # Support both question_id (string) and internal_question_id (integer)
+                if question_id.isdigit():
+                    # Search by internal_question_id
+                    cursor.execute("""
+                        SELECT q.question_id, q.ms, q.combined_text, p.paper_name
+                        FROM questions q
+                        JOIN papers p ON q.paper_id = p.paper_id
+                        WHERE q.internal_question_id = %s
+                    """, (int(question_id),))
+                else:
+                    # Search by question_id string
+                    cursor.execute("""
+                        SELECT q.question_id, q.ms, q.combined_text, p.paper_name
+                        FROM questions q
+                        JOIN papers p ON q.paper_id = p.paper_id
+                        WHERE q.question_id = %s
+                    """, (question_id,))
 
                 result = cursor.fetchone()
                 if not result:
@@ -170,21 +180,35 @@ class AnswerValidationService:
             return 'very_slow'
 
     def get_question_difficulty_timing(self, question_id: str) -> Dict[str, Any]:
-        """Get average timing data for a question to set expectations"""
+        """Get average timing data for a question to set expectations - supports both question ID formats"""
         try:
             with self.db_manager.get_db_connection() as conn:
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-                cursor.execute("""
-                    SELECT
-                        AVG(time_spent_sec) as avg_time,
-                        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY time_spent_sec) as median_time,
-                        COUNT(*) as attempt_count,
-                        AVG(CASE WHEN is_correct THEN 1.0 ELSE 0.0 END) as success_rate
-                    FROM student_question_history sqh
-                    JOIN questions q ON sqh.internal_question_id = q.internal_question_id
-                    WHERE q.question_id = %s
-                """, (question_id,))
+                # Support both question_id (string) and internal_question_id (integer)
+                if question_id.isdigit():
+                    # Search by internal_question_id
+                    cursor.execute("""
+                        SELECT
+                            AVG(time_spent_sec) as avg_time,
+                            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY time_spent_sec) as median_time,
+                            COUNT(*) as attempt_count,
+                            AVG(CASE WHEN is_correct THEN 1.0 ELSE 0.0 END) as success_rate
+                        FROM student_question_history sqh
+                        WHERE sqh.internal_question_id = %s
+                    """, (int(question_id),))
+                else:
+                    # Search by question_id string
+                    cursor.execute("""
+                        SELECT
+                            AVG(time_spent_sec) as avg_time,
+                            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY time_spent_sec) as median_time,
+                            COUNT(*) as attempt_count,
+                            AVG(CASE WHEN is_correct THEN 1.0 ELSE 0.0 END) as success_rate
+                        FROM student_question_history sqh
+                        JOIN questions q ON sqh.internal_question_id = q.internal_question_id
+                        WHERE q.question_id = %s
+                    """, (question_id,))
 
                 result = cursor.fetchone()
                 if result and result['attempt_count'] > 0:

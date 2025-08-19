@@ -38,12 +38,54 @@ class StudentInteractionService:
             )
 
             # Cache session data (no database needed - just Redis)
+            # Convert Recommendation objects to dicts for JSON serialization
+            recommendations_dicts = []
+            for rec in recommendations:
+                try:
+                    # Import dataclasses for conversion
+                    import dataclasses
+
+                                        # Try different ways to convert Recommendation objects to dicts
+                    if hasattr(rec, '__dataclass_fields__'):
+                        # It's a dataclass - use dataclasses.asdict
+                        rec_dict = dataclasses.asdict(rec)
+                        recommendations_dicts.append(rec_dict)
+                    elif hasattr(rec, '__dict__'):
+                        # Regular object with __dict__
+                        rec_dict = {}
+                        for key, value in rec.__dict__.items():
+                            # Handle special types that might not serialize
+                            if isinstance(value, (str, int, float, bool, type(None))):
+                                rec_dict[key] = value
+                            else:
+                                rec_dict[key] = str(value)
+                        recommendations_dicts.append(rec_dict)
+                    elif isinstance(rec, dict):
+                        recommendations_dicts.append(rec)
+                    else:
+                        # Manual field extraction for Recommendation objects
+                        rec_dict = {
+                            'question_id': getattr(rec, 'question_id', 'unknown'),
+                            'internal_question_id': getattr(rec, 'internal_question_id', 0),
+                            'paper_id': getattr(rec, 'paper_id', 0),
+                            'weighted_score': getattr(rec, 'weighted_score', 0.0),
+                            'dominant_cluster': getattr(rec, 'dominant_cluster', 0),
+                            'similarity_score': getattr(rec, 'similarity_score', None),
+                            'combined_score': getattr(rec, 'combined_score', None),
+                            'reasoning': getattr(rec, 'reasoning', None)
+                        }
+                        recommendations_dicts.append(rec_dict)
+                except Exception as e:
+                    # Last resort fallback
+                    print(f"⚠️ Error converting recommendation: {e}")
+                    recommendations_dicts.append({"error": "Conversion failed", "raw": str(rec)})
+
             session_data = {
                 'session_id': session_id,
                 'student_id': student_id,
                 'objective': objective,
                 'session_type': session_type,
-                'recommendations': recommendations,
+                'recommendations': recommendations_dicts,
                 'session_started_at': session_start,
                 'estimated_duration_minutes': target_questions * 3  # 3 minutes per question estimate
             }
@@ -128,14 +170,24 @@ class StudentInteractionService:
                 from services.answer_validation_service import AnswerValidationService
                 validator = AnswerValidationService(self.db_manager)
 
+                # Get the proper question data to ensure we have the Cambridge format question_id
+                question_data = self._get_question_data(question_id)
+                if not question_data:
+                    raise ValueError(f"Question {question_id} not found")
+
+                # Use the Cambridge format question_id for validation
+                cambridge_question_id = question_data['question_id']
+
                 # Use the appropriate answer for validation
                 student_answer = selected_option or answer_text
                 if student_answer:
+                    # Use calculated started_at safely
+                    start_time = attempt_data.get('started_at', time.time() - 120)
                     validation_result = validator.submit_with_validation(
-                        question_id=question_id,
+                        question_id=cambridge_question_id,  # Use Cambridge format
                         student_answer=student_answer,
                         answer_type="multiple_choice" if selected_option else "short_answer",
-                        start_time=attempt_data['started_at']
+                        start_time=start_time
                     )
                     is_correct = validation_result['validation']['is_correct']
                     print(f"🤖 Auto-validated answer: {'✓ Correct' if is_correct else '✗ Incorrect'}")
@@ -291,19 +343,35 @@ class StudentInteractionService:
             raise
 
     def _get_question_data(self, question_id: str) -> Optional[Dict[str, Any]]:
-        """Get question data from database"""
+        """Get question data from database - supports both question_id (string) and internal_question_id (integer)"""
         try:
             with self.db_manager.get_db_connection() as conn:
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
-                cursor.execute("""
-                    SELECT q.internal_question_id, q.question_id, q.paper_id, q.question_number,
-                           q.images, q.text_length, q.source_file, q.ms,
-                           q.is_active, q.created_at, q.updated_at,
-                           p.paper_name, p.paper_code
-                    FROM questions q
-                    JOIN papers p ON q.paper_id = p.paper_id
-                    WHERE q.question_id = %s
-                """, (question_id,))
+
+                # Support both question_id (string) and internal_question_id (integer)
+                if question_id.isdigit():
+                    # Search by internal_question_id
+                    cursor.execute("""
+                        SELECT q.internal_question_id, q.question_id, q.paper_id, q.question_number,
+                               q.images, q.text_length, q.source_file, q.ms,
+                               q.is_active, q.created_at, q.updated_at,
+                               p.paper_name, p.paper_code
+                        FROM questions q
+                        JOIN papers p ON q.paper_id = p.paper_id
+                        WHERE q.internal_question_id = %s
+                    """, (int(question_id),))
+                else:
+                    # Search by question_id string
+                    cursor.execute("""
+                        SELECT q.internal_question_id, q.question_id, q.paper_id, q.question_number,
+                               q.images, q.text_length, q.source_file, q.ms,
+                               q.is_active, q.created_at, q.updated_at,
+                               p.paper_name, p.paper_code
+                        FROM questions q
+                        JOIN papers p ON q.paper_id = p.paper_id
+                        WHERE q.question_id = %s
+                    """, (question_id,))
+
                 result = cursor.fetchone()
                 return dict(result) if result else None
         except Exception as e:
@@ -335,17 +403,24 @@ class StudentInteractionService:
             return None
 
     def _get_internal_question_id(self, question_id: str) -> int:
-        """Get internal question ID from question_id"""
+        """Get internal question ID from question_id - supports both integer and Cambridge format"""
         with self.db_manager.get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT internal_question_id FROM questions
-                WHERE question_id = %s
-            """, (question_id,))
-            result = cursor.fetchone()
-            if not result:
-                raise ValueError(f"Question {question_id} not found")
-            return result[0]
+
+            # Support both question_id (string) and internal_question_id (integer)
+            if question_id.isdigit():
+                # If it's already an integer, return it
+                return int(question_id)
+            else:
+                # Search by Cambridge format question_id
+                cursor.execute("""
+                    SELECT internal_question_id FROM questions
+                    WHERE question_id = %s
+                """, (question_id,))
+                result = cursor.fetchone()
+                if not result:
+                    raise ValueError(f"Question {question_id} not found")
+                return result[0]
 
     def _get_or_create_enrollment(self, student_id: str) -> int:
         """Get or create enrollment ID for student"""

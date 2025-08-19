@@ -8,8 +8,18 @@ import time
 
 class DatabaseManager:
     def __init__(self, db_config, redis_config):
-        self.db_config = db_config
-        self.redis_client = redis.Redis(**redis_config)
+        # Convert config objects to dictionaries if needed
+        if hasattr(db_config, 'to_dict'):
+            self.db_config = db_config.to_dict()
+        else:
+            self.db_config = db_config
+
+        if hasattr(redis_config, 'to_dict'):
+            redis_dict = redis_config.to_dict()
+        else:
+            redis_dict = redis_config
+
+        self.redis_client = redis.Redis(**redis_dict)
         self.RealDictCursor = RealDictCursor  # Make RealDictCursor accessible
 
     @contextmanager

@@ -6,7 +6,6 @@ Integrates enriched vectors + transition matrix to recommend specific questions
 import numpy as np
 import pandas as pd
 from ml.vector_encoder import RichVectorEncoder, load_student_history_normalized
-from ml.transition_matrix import _build_cooccurrence_transitions
 import time
 from psycopg2.extras import RealDictCursor
 
@@ -604,26 +603,30 @@ class OptimizedRecommendationEngine:
                                 primary_cluster = np.argmax(q_clusters)
                                 cluster_strength = np.max(q_clusters)
 
-                                scored_questions.append({
-                                    'question_id': row['question_id'],
-                                    'internal_question_id': row['internal_question_id'],
-                                    'score': float(score),
-                                    'primary_cluster': int(primary_cluster),
-                                    'cluster_strength': float(cluster_strength),
-                                    'reasoning': f'ML-scored: {score:.3f} alignment with learning path',
-                                    'paper_id': row['paper_id']
-                                })
+                                # Create proper Recommendation model instance
+                                from data.models import Recommendation
+                                recommendation = Recommendation(
+                                    question_id=row['question_id'],
+                                    internal_question_id=row['internal_question_id'],
+                                    paper_id=row['paper_id'],
+                                    weighted_score=float(score),
+                                    dominant_cluster=int(primary_cluster),
+                                    similarity_score=float(cluster_strength),
+                                    combined_score=float(score),
+                                    reasoning=f'ML-scored: {score:.3f} alignment with learning path'
+                                )
+                                scored_questions.append(recommendation)
                         except Exception as e:
                             print(f"⚠️ Could not score question {row['question_id']}: {e}")
 
                 # Sort by score (highest first) and take top_k
                 if scored_questions:
-                    scored_questions.sort(key=lambda x: x['score'], reverse=True)
+                    scored_questions.sort(key=lambda x: x.weighted_score, reverse=True)
                     recommendations = scored_questions[:top_k]
 
                     print(f"🎯 Scored {len(scored_questions)} questions, selected top {len(recommendations)}")
                     for i, rec in enumerate(recommendations, 1):
-                        print(f"   {i}. Q{rec['question_id']}: Score={rec['score']:.3f}, Cluster={rec['primary_cluster']}")
+                        print(f"   {i}. Q{rec.question_id}: Score={rec.weighted_score:.3f}, Cluster={rec.dominant_cluster}")
 
                     return recommendations
                 else:
@@ -668,14 +671,19 @@ class OptimizedRecommendationEngine:
                         except:
                             primary_cluster = 0
 
-                    recommendations.append({
-                        'question_id': row['question_id'],
-                        'internal_question_id': row['internal_question_id'],
-                        'score': 0.5,
-                        'primary_cluster': primary_cluster,
-                        'reasoning': 'Random fallback recommendation',
-                        'paper_id': row['paper_id']
-                    })
+                    # Create proper Recommendation model instance for fallback
+                    from data.models import Recommendation
+                    recommendation = Recommendation(
+                        question_id=row['question_id'],
+                        internal_question_id=row['internal_question_id'],
+                        paper_id=row['paper_id'],
+                        weighted_score=0.5,
+                        dominant_cluster=primary_cluster,
+                        similarity_score=0.5,
+                        combined_score=0.5,
+                        reasoning='Random fallback recommendation'
+                    )
+                    recommendations.append(recommendation)
 
                 return recommendations
 
@@ -718,14 +726,19 @@ class OptimizedRecommendationEngine:
                         except:
                             primary_cluster = 0
 
-                    recommendations.append({
-                        'question_id': row['question_id'],
-                        'internal_question_id': row['internal_question_id'],
-                        'score': 1.0,
-                        'primary_cluster': primary_cluster,
-                        'reasoning': 'Default recommendation for new student',
-                        'paper_id': row['paper_id']
-                    })
+                    # Create proper Recommendation model instance for default
+                    from data.models import Recommendation
+                    recommendation = Recommendation(
+                        question_id=row['question_id'],
+                        internal_question_id=row['internal_question_id'],
+                        paper_id=row['paper_id'],
+                        weighted_score=1.0,
+                        dominant_cluster=primary_cluster,
+                        similarity_score=1.0,
+                        combined_score=1.0,
+                        reasoning='Default recommendation for new student'
+                    )
+                    recommendations.append(recommendation)
 
                 print(f"✅ Generated {len(recommendations)} default recommendations")
                 return recommendations

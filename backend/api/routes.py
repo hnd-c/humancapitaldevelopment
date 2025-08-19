@@ -266,10 +266,20 @@ async def get_recommendations(
         formatted_recommendations = []
         for r in response_data.recommendations:
             if hasattr(r, '__dict__'):
-                # It's a model object, convert to dict
-                formatted_recommendations.append(r.__dict__)
+                # It's a Recommendation model object, convert to dict with proper field mapping
+                rec_dict = {
+                    'question_id': r.question_id,
+                    'internal_question_id': r.internal_question_id,
+                    'paper_id': r.paper_id,
+                    'score': r.weighted_score,  # Map weighted_score to score for API consistency
+                    'primary_cluster': r.dominant_cluster,
+                    'cluster_strength': r.similarity_score,
+                    'reasoning': r.reasoning,
+                    'combined_score': r.combined_score
+                }
+                formatted_recommendations.append(rec_dict)
             elif isinstance(r, dict):
-                # It's already a dict
+                # It's already a dict, ensure proper field mapping
                 formatted_recommendations.append(r)
             else:
                 # Handle string representations from cache
@@ -321,9 +331,7 @@ async def get_student_performance(
             overall_success_rate=performance_model.overall_success_rate,
             cluster_performance=performance_model.cluster_performance,
             recent_activity=performance_model.recent_activity,
-            analysis_timestamp=performance_model.analysis_timestamp,
-            strengths=getattr(performance_model, 'strengths', []),
-            weaknesses=getattr(performance_model, 'weaknesses', [])
+            analysis_timestamp=performance_model.analysis_timestamp
         )
 
     except HTTPException:
@@ -410,13 +418,13 @@ async def get_question_details(
 ):
     """Get detailed information about a specific question"""
     try:
-        # Validate question_id format
+        # Validate question_id format - support both internal_question_id (integer) and question_id (string)
         if not question_id or len(question_id.strip()) == 0:
             raise HTTPException(status_code=400, detail="Question ID cannot be empty")
 
-        # Basic format validation for question_id
-        if not question_id.isdigit() and not question_id.startswith('9702_'):
-            raise HTTPException(status_code=400, detail="Invalid question ID format")
+        # Basic format validation for question_id - accept integers or Cambridge format strings
+        if not (question_id.isdigit() or question_id.startswith('9702_')):
+            raise HTTPException(status_code=400, detail="Invalid question ID format: must be integer or Cambridge format (9702_...)")
         # Use the Question Rendering Service to get the question with proper Question model
         from services.question_rendering_service import QuestionRenderingService
         renderer = QuestionRenderingService(system.db_manager, system.cache_manager)
@@ -459,35 +467,69 @@ async def get_similar_questions(
         with system.db_manager.get_db_connection() as conn:
             cursor = conn.cursor(cursor_factory=system.db_manager.RealDictCursor)
 
-            # Get question embeddings first
-            cursor.execute("""
-                SELECT openai_embedding, umap_embedding, soft_cluster
-                FROM questions
-                WHERE question_id = %s
-            """, (question_id,))
+            # Get question embeddings first - support both question ID formats
+            if question_id.isdigit():
+                # Search by internal_question_id
+                cursor.execute("""
+                    SELECT openai_embedding, umap_embedding, soft_cluster
+                    FROM questions
+                    WHERE internal_question_id = %s
+                """, (int(question_id),))
+            else:
+                # Search by question_id string
+                cursor.execute("""
+                    SELECT openai_embedding, umap_embedding, soft_cluster
+                    FROM questions
+                    WHERE question_id = %s
+                """, (question_id,))
 
             question_data = cursor.fetchone()
             if not question_data:
                 raise HTTPException(status_code=404, detail="Question not found")
 
-            # Use the database function for multimodal similarity
-            cursor.execute("""
-                SELECT * FROM find_similar_questions_multimodal(
-                    %s::vector(3072),
-                    %s::vector(50),
-                    %s::vector(20),
-                    0.5, 0.2, 0.3,
-                    %s, %s
-                )
-            """, (
-                question_data['openai_embedding'],
-                question_data['umap_embedding'],
-                question_data['soft_cluster'],
-                similarity_threshold,
-                top_k
-            ))
+            # Use a simpler similarity search for now (avoiding complex multimodal function)
+            if question_data['openai_embedding']:
+                cursor.execute("""
+                    SELECT q.internal_question_id, q.question_id,
+                           1 - (q.openai_embedding <=> %s::vector(3072)) as similarity_score
+                    FROM questions q
+                    WHERE q.openai_embedding IS NOT NULL
+                      AND 1 - (q.openai_embedding <=> %s::vector(3072)) >= %s
+                      AND q.question_id != %s
+                    ORDER BY q.openai_embedding <=> %s::vector(3072)
+                    LIMIT %s
+                """, (
+                    question_data['openai_embedding'],
+                    question_data['openai_embedding'],
+                    similarity_threshold,
+                    question_id,
+                    question_data['openai_embedding'],
+                    top_k
+                ))
+            elif question_data['soft_cluster']:
+                cursor.execute("""
+                    SELECT q.internal_question_id, q.question_id,
+                           1 - (q.soft_cluster <=> %s::vector(20)) as similarity_score
+                    FROM questions q
+                    WHERE q.soft_cluster IS NOT NULL
+                      AND 1 - (q.soft_cluster <=> %s::vector(20)) >= %s
+                      AND q.question_id != %s
+                    ORDER BY q.soft_cluster <=> %s::vector(20)
+                    LIMIT %s
+                """, (
+                    question_data['soft_cluster'],
+                    question_data['soft_cluster'],
+                    similarity_threshold,
+                    question_id,
+                    question_data['soft_cluster'],
+                    top_k
+                ))
+            else:
+                # No embeddings available, return empty results
+                similar_questions = []
 
-            similar_questions = [dict(row) for row in cursor.fetchall()]
+            if 'similar_questions' not in locals():
+                similar_questions = [dict(row) for row in cursor.fetchall()]
 
         return {
             "question_id": question_id,
@@ -1312,7 +1354,7 @@ async def get_questions_by_paper(
          summary="Get basic 2D UMAP coordinates",
          description="Get all 2D UMAP coordinates with optional cluster filtering")
 async def get_umap_coordinates(
-    cluster_filter: Optional[List[int]] = Query(None, description="Filter by cluster IDs"),
+    cluster_filter: Optional[str] = Query(None, description="Filter by cluster IDs (comma-separated)"),
     x_min: Optional[float] = Query(None, description="Minimum X coordinate"),
     x_max: Optional[float] = Query(None, description="Maximum X coordinate"),
     y_min: Optional[float] = Query(None, description="Minimum Y coordinate"),
@@ -1335,8 +1377,18 @@ async def get_umap_coordinates(
         if any(coord is not None for coord in [x_min, x_max, y_min, y_max]):
             spatial_bounds = (x_min, x_max, y_min, y_max)
 
+        # Handle comma-separated cluster_filter strings (for backward compatibility)
+        parsed_cluster_filter = cluster_filter
+        if cluster_filter and isinstance(cluster_filter, str):
+            # If it's a single string with commas, convert to list of ints
+            try:
+                parsed_cluster_filter = [int(x.strip()) for x in cluster_filter.split(',')]
+            except (ValueError, AttributeError):
+                # If parsing fails, keep as is and let the service handle the error
+                pass
+
         result = await umap_service.get_basic_coordinates(
-            cluster_filter=cluster_filter,
+            cluster_filter=parsed_cluster_filter,
             spatial_bounds=spatial_bounds,
             offset=offset,
             limit=limit,
@@ -1356,7 +1408,7 @@ async def get_student_umap_coordinates(
     student_id: str,
 
     # Filtering options
-    status_filter: Optional[List[QuestionStatusEnum]] = Query(None, description="Filter by question status"),
+    status_filter: Optional[str] = Query(None, description="Filter by question status (comma-separated)"),
     paper_codes: Optional[List[str]] = Query(None, description="Filter by paper codes"),
 
     # Spatial filtering (for zoom/pan)
@@ -1397,9 +1449,20 @@ async def get_student_umap_coordinates(
         if any(coord is not None for coord in [x_min, x_max, y_min, y_max]):
             spatial_bounds = (x_min, x_max, y_min, y_max)
 
+        # Handle comma-separated status_filter strings (for backward compatibility)
+        parsed_status_filter = None
+        if status_filter:
+            try:
+                from api.schemas import QuestionStatusEnum
+                status_values = [s.strip() for s in status_filter.split(',')]
+                parsed_status_filter = [QuestionStatusEnum(s) for s in status_values]
+            except (ValueError, AttributeError) as e:
+                # Invalid status values - let service handle the error
+                parsed_status_filter = status_filter
+
         result = await umap_service.get_student_coordinates(
             student_id=student_id,
-            status_filter=status_filter,
+            status_filter=parsed_status_filter,
             paper_codes=paper_codes,
             spatial_bounds=spatial_bounds,
             offset=offset,
