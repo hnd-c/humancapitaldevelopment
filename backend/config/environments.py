@@ -163,7 +163,9 @@ class ProductionConfig(SystemConfig):
         required_env_vars = [
             "PROD_DB_PASSWORD",
             "PROD_REDIS_PASSWORD",
-            "PROD_JWT_SECRET"
+            "PROD_JWT_SECRET",
+            "S3_BUCKET_NAME",
+            "S3_REGION"
         ]
 
         missing_vars = []

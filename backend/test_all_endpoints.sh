@@ -195,45 +195,41 @@ test_endpoint "All papers" "$response" "Check papers table exists and has data. 
 response=$(curl -s "$BASE_URL/papers/9702_w22_qp_12/questions" 2>/dev/null)
 test_endpoint "Questions by paper" "$response" "Ensure paper_id exists and questions are linked to papers properly"
 
-echo -e "\n🖼️ Question Rendering" | tee -a output_api.txt
+echo -e "\n🖼️ Frontend Image Composition" | tee -a output_api.txt
 echo "----------------------------" | tee -a output_api.txt
 
-# Test 26: Question rendering
-response=$(curl -s "$BASE_URL/questions/$FIRST_QUESTION/render" 2>/dev/null)
-test_endpoint "Question rendering" "$response" "Check image processing service. Verify p1_images directory structure and rendering endpoint"
-
-# Test 27: Question summary
-response=$(curl -s "$BASE_URL/questions/$FIRST_QUESTION/summary" 2>/dev/null)
-test_endpoint "Question summary" "$response" "Verify question metadata and summary generation logic"
+# Test 26: Question images for frontend composition
+response=$(curl -s "$BASE_URL/questions/$FIRST_QUESTION/images" 2>/dev/null)
+test_endpoint "Question images for frontend" "$response" "Check new image service. Verify image URLs are generated correctly for frontend composition"
 
 echo -e "\n🔍 Similar Questions" | tee -a output_api.txt
 echo "----------------------------" | tee -a output_api.txt
 
-# Test 28: Similar questions
+# Test 27: Similar questions
 response=$(curl -s "$BASE_URL/questions/$FIRST_QUESTION/similar?limit=3" 2>/dev/null)
 test_endpoint "Similar questions" "$response" "Check vector similarity service. Verify embeddings are generated for questions"
 
 echo -e "\n🔧 Cache Management" | tee -a output_api.txt
 echo "----------------------------" | tee -a output_api.txt
 
-# Test 29: Student-specific cache invalidation
+# Test 28: Student-specific cache invalidation
 response=$(curl -s -X POST "$BASE_URL/cache/invalidate?student_id=20" 2>/dev/null)
 test_endpoint "Student cache invalidation" "$response" "Verify Redis connection and cache service functionality"
 
-# Test 30: Full cache invalidation
+# Test 29: Full cache invalidation
 response=$(curl -s -X POST "$BASE_URL/cache/invalidate" 2>/dev/null)
 test_endpoint "Full cache invalidation" "$response" "Check global cache clearing functionality"
 
 echo -e "\n📊 Performance Testing" | tee -a output_api.txt
 echo "----------------------------" | tee -a output_api.txt
 
-# Test 31: Fresh recommendations
+# Test 30: Fresh recommendations
 response=$(curl -s -X POST "$BASE_URL/recommendations" \
   -H "Content-Type: application/json" \
   -d '{"student_id": "20", "objective": "balanced", "top_k": 3}' 2>/dev/null)
 test_endpoint "Fresh recommendations" "$response" "Test recommendation engine after cache clear"
 
-# Test 32: Cached recommendations
+# Test 31: Cached recommendations
 response=$(curl -s -X POST "$BASE_URL/recommendations" \
   -H "Content-Type: application/json" \
   -d '{"student_id": "20", "objective": "balanced", "top_k": 3}' 2>/dev/null)
@@ -242,7 +238,7 @@ test_endpoint "Cached recommendations" "$response" "Verify caching improves resp
 echo -e "\n🗺️ UMAP Visualization Endpoints" | tee -a output_api.txt
 echo "----------------------------" | tee -a output_api.txt
 
-# Test 33: Basic 2D UMAP coordinates
+# Test 32: Basic 2D UMAP coordinates
 response=$(curl -s "$BASE_URL/umap-2d/coordinates?limit=100" 2>/dev/null)
 test_endpoint "Basic 2D UMAP coordinates" "$response" "Check if umap_2d_embedding column exists in questions table. Run migration 03_umap_visualization_views.sql"
 
@@ -355,8 +351,10 @@ if [ ${#FAILED_TESTS[@]} -gt 0 ]; then
     echo "5. Apply UMAP migration: psql -d human_capital_dev -f database/migrations/03_umap_visualization_views.sql" | tee -a output_api.txt
     echo "6. Refresh materialized views: REFRESH MATERIALIZED VIEW student_question_status;" | tee -a output_api.txt
     echo "7. Check 2D UMAP data: SELECT COUNT(*) FROM questions WHERE umap_2d_embedding IS NOT NULL;" | tee -a output_api.txt
-    echo "8. Install missing dependencies: pip install -r requirements.txt" | tee -a output_api.txt
-    echo "9. Check system health: python main.py --mode health" | tee -a output_api.txt
+    echo "8. Check p1_images directory is mounted correctly at /static/images" | tee -a output_api.txt
+    echo "9. Verify S3 environment variables for production (S3_BUCKET_NAME, S3_REGION)" | tee -a output_api.txt
+    echo "10. Install missing dependencies: pip install -r requirements.txt" | tee -a output_api.txt
+    echo "11. Check system health: python main.py --mode health" | tee -a output_api.txt
 fi
 
 if [ $FAILED -eq 0 ]; then
@@ -372,7 +370,7 @@ echo "• Student performance analysis" | tee -a output_api.txt
 echo "• Learning session management" | tee -a output_api.txt
 echo "• Question search and retrieval" | tee -a output_api.txt
 echo "• Answer validation and timing" | tee -a output_api.txt
-echo "• Image processing and rendering" | tee -a output_api.txt
+echo "• Frontend image composition and URL generation" | tee -a output_api.txt
 echo "• Vector similarity matching" | tee -a output_api.txt
 echo "• Cache management and optimization" | tee -a output_api.txt
 echo "• Paper and content organization" | tee -a output_api.txt

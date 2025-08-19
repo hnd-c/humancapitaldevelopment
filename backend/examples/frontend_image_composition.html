@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend Image Composition Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .question-container {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            background: #f9f9f9;
+        }
+
+        .question-header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .question-images {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .image-item {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            overflow: hidden;
+            background: white;
+        }
+
+        .image-title {
+            background: #34495e;
+            color: white;
+            padding: 8px 15px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .image-content {
+            padding: 10px;
+            text-align: center;
+        }
+
+        .image-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 3px;
+        }
+
+        .question-text {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+            margin-top: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #e74c3c;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .controls {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .controls input, .controls button {
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #bdc3c7;
+            border-radius: 3px;
+        }
+
+        .controls button {
+            background: #3498db;
+            color: white;
+            cursor: pointer;
+        }
+
+        .controls button:hover {
+            background: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎨 Frontend Image Composition Demo</h1>
+    <p>This demonstrates how the frontend can compose question images without server-side rendering.</p>
+
+    <div class="controls">
+        <label for="questionId">Question ID:</label>
+        <input type="text" id="questionId" value="9702_w22_qp_13_38" placeholder="Enter question ID">
+        <button onclick="loadQuestion()">Load Question</button>
+        <button onclick="loadRandomQuestion()">Random Question</button>
+    </div>
+
+    <div id="questionContainer"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';  // Adjust for your API server
+
+        async function loadQuestion() {
+            const questionId = document.getElementById('questionId').value;
+            if (!questionId.trim()) {
+                alert('Please enter a question ID');
+                return;
+            }
+
+            const container = document.getElementById('questionContainer');
+            container.innerHTML = '<div class="loading">Loading question...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/questions/${questionId}/images`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const questionData = await response.json();
+                renderQuestion(questionData);
+
+            } catch (error) {
+                console.error('Error loading question:', error);
+                container.innerHTML = `<div class="error">Error loading question: ${error.message}</div>`;
+            }
+        }
+
+        async function loadRandomQuestion() {
+            const container = document.getElementById('questionContainer');
+            container.innerHTML = '<div class="loading">Loading random question...</div>';
+
+            try {
+                // First get a random question
+                const randomResponse = await fetch(`${API_BASE}/questions/random?count=1`);
+                const randomData = await randomResponse.json();
+
+                if (randomData.questions && randomData.questions.length > 0) {
+                    const questionId = randomData.questions[0].question_id;
+                    document.getElementById('questionId').value = questionId;
+                    await loadQuestion();
+                } else {
+                    throw new Error('No random questions available');
+                }
+
+            } catch (error) {
+                console.error('Error loading random question:', error);
+                container.innerHTML = `<div class="error">Error loading random question: ${error.message}</div>`;
+            }
+        }
+
+        function renderQuestion(questionData) {
+            const container = document.getElementById('questionContainer');
+
+            const questionHtml = `
+                <div class="question-container">
+                    <div class="question-header">
+                        <h2>Paper ${questionData.paper_code} - Question ${questionData.question_number}</h2>
+                        <p><strong>ID:</strong> ${questionData.question_id} | <strong>Images:</strong> ${questionData.total_images}</p>
+                    </div>
+
+                    ${questionData.images.length > 0 ? `
+                        <div class="question-images">
+                            ${questionData.images.map((image, index) => `
+                                <div class="image-item">
+                                    <div class="image-title">Image ${index + 1}: ${image.filename}</div>
+                                    <div class="image-content">
+                                        ${image.exists ?
+                                            `<img src="${image.url}" alt="Question Image ${index + 1}" onload="this.style.opacity=1" style="opacity:0;transition:opacity 0.3s" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+                                             <div style="display:none;color:#e74c3c;padding:20px;">❌ Image failed to load</div>` :
+                                            `<div style="color:#e74c3c;padding:20px;">❌ Image not found: ${image.original_path}</div>`
+                                        }
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<div style="padding:20px;color:#666;text-align:center;">No images available for this question</div>'}
+
+                    ${questionData.question_text ? `
+                        <div class="question-text">
+                            <h3>Question Text:</h3>
+                            <p>${questionData.question_text.length > 500 ?
+                                questionData.question_text.substring(0, 500) + '...' :
+                                questionData.question_text}</p>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            container.innerHTML = questionHtml;
+        }
+
+        // Load a question on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadQuestion();
+        });
+    </script>
+</body>
+</html>

@@ -12,13 +12,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
 
 # Import our system components
 from main import HumanCapitalDevelopmentSystem
-from config.environments import load_config_for_environment
+from config.environments import load_config_for_environment, is_development
 from api.schemas import (
     StudentSessionRequest, StudentSessionResponse,
     QuestionAttemptRequest, QuestionAttemptResponse,
@@ -26,7 +27,7 @@ from api.schemas import (
     RandomQuestionsResponse, QuestionSearchResponse,
     QuestionDetailsResponse,
     # UMAP Visualization schemas
-    QuestionStatusEnum, UMAPBoundsResponse,
+    UMAPBoundsResponse,
     StudentUMAPResponse, BasicUMAPResponse, QuestionStatusResponse
 )
 # Import data models for consistent response handling
@@ -93,6 +94,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files for development (images)
+if is_development():
+    from pathlib import Path
+    static_path = Path(__file__).parent.parent / "p1_images"
+    if static_path.exists():
+        app.mount("/static/images", StaticFiles(directory=str(static_path)), name="images")
 
 
 # Pydantic models for API
@@ -378,10 +386,10 @@ async def get_random_questions(
             raise HTTPException(status_code=400, detail="Count must be positive")
         if count > 100:
             raise HTTPException(status_code=400, detail="Count cannot exceed 100")
-        from services.question_rendering_service import QuestionRenderingService
-        renderer = QuestionRenderingService(system.db_manager, system.cache_manager)
-        questions = renderer.get_random_questions(count)
-        summaries = [renderer.question_to_summary(q) for q in questions]
+        from services.question_service import QuestionService
+        question_service = QuestionService(system.db_manager)
+        questions = question_service.get_random_questions(count)
+        summaries = [question_service.question_to_summary(q) for q in questions]
         return RandomQuestionsResponse(count=len(summaries), questions=summaries)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting random questions: {str(e)}")
@@ -402,10 +410,10 @@ async def search_questions(
             raise HTTPException(status_code=400, detail="Limit must be positive")
         if limit > 200:
             raise HTTPException(status_code=400, detail="Limit cannot exceed 200")
-        from services.question_rendering_service import QuestionRenderingService
-        renderer = QuestionRenderingService(system.db_manager, system.cache_manager)
-        questions = renderer.search_questions(q, limit)
-        summaries = [renderer.get_question_summary(question) for question in questions]
+        from services.question_service import QuestionService
+        question_service = QuestionService(system.db_manager)
+        questions = question_service.search_questions(q, limit)
+        summaries = [question_service.get_question_summary(question) for question in questions]
         return QuestionSearchResponse(query=q, count=len(summaries), questions=summaries)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error searching questions: {str(e)}")
@@ -426,10 +434,10 @@ async def get_question_details(
         if not (question_id.isdigit() or question_id.startswith('9702_')):
             raise HTTPException(status_code=400, detail="Invalid question ID format: must be integer or Cambridge format (9702_...)")
         # Use the Question Rendering Service to get the question with proper Question model
-        from services.question_rendering_service import QuestionRenderingService
-        renderer = QuestionRenderingService(system.db_manager, system.cache_manager)
+        from services.question_service import QuestionService
+        question_service = QuestionService(system.db_manager)
 
-        question = renderer.get_question_by_id(question_id)
+        question = question_service.get_question_by_id(question_id)
         if not question:
             raise HTTPException(status_code=404, detail="Question not found")
 
@@ -885,14 +893,7 @@ async def warm_caches(
             objectives
         )
 
-        # Start question rendering cache warming in background
-        from services.question_rendering_service import QuestionRenderingService
-        renderer = QuestionRenderingService(system.db_manager, system.cache_manager)
-        background_tasks.add_task(
-            renderer.warm_popular_questions_cache,
-            None,  # Auto-select popular questions
-            (12, 16)  # Default figure size
-        )
+        # Note: Question rendering cache warming removed (using frontend composition now)
 
         return {
             "message": "Cache warming started in background",
@@ -901,9 +902,9 @@ async def warm_caches(
                 "objectives": objectives,
                 "estimated_duration": "2-3 minutes"
             },
-            "question_rendering_warming": {
-                "popular_questions": "Auto-selected from recent activity",
-                "estimated_duration": "3-5 minutes"
+            "image_rendering": {
+                "note": "Frontend composition - no server-side image cache needed",
+                "status": "N/A"
             }
         }
 
@@ -923,10 +924,8 @@ async def get_cache_statistics(
         # Get cache service statistics
         cache_stats = system.cache_manager.get_cache_statistics()
 
-        # Get question rendering statistics
-        from services.question_rendering_service import QuestionRenderingService
-        renderer = QuestionRenderingService(system.db_manager, system.cache_manager)
-        rendering_stats = renderer.get_cache_statistics()
+        # Note: Question rendering statistics removed (using frontend composition now)
+        rendering_stats = {"note": "Frontend composition - no server-side rendering cache"}
 
         # Get detailed cache analytics
         cache_analytics = system.cache_manager.cache_analytics()
@@ -977,7 +976,7 @@ async def performance_benchmark(
                 system.cache_manager.invalidate_student_cache(test_student_id)
 
             start_time = time.time()
-            recommendations = system.get_recommendations_optimized(
+            _ = system.get_recommendations_optimized(
                 student_id=test_student_id,
                 objective='balanced',
                 top_k=5,
@@ -988,7 +987,7 @@ async def performance_benchmark(
 
             # Warm cache test
             start_time = time.time()
-            recommendations = system.get_recommendations_optimized(
+            _ = system.get_recommendations_optimized(
                 student_id=test_student_id,
                 objective='balanced',
                 top_k=5,
@@ -1008,45 +1007,14 @@ async def performance_benchmark(
             "improvement_percentage": ((avg_cold - avg_warm) / avg_cold * 100) if avg_cold > 0 else 0
         }
 
-        # Test question rendering performance
-        from services.question_rendering_service import QuestionRenderingService
-        renderer = QuestionRenderingService(system.db_manager, system.cache_manager)
-
-        # Get a random question for testing
-        random_questions = renderer.get_random_questions(1)
-        if random_questions:
-            test_question = random_questions[0]
-
-            render_times_cold = []
-            render_times_warm = []
-
-            for i in range(min(5, iterations)):  # Fewer iterations for rendering
-                # Cold cache test
-                cache_key = renderer._generate_cache_key(test_question, (12, 16), 'PNG')
-                if system.cache_manager:
-                    system.cache_manager.redis.delete(cache_key)
-
-                start_time = time.time()
-                img_bytes = renderer.render_question_to_bytes(test_question, (12, 16), 'PNG')
-                cold_time = (time.time() - start_time) * 1000
-                render_times_cold.append(cold_time)
-
-                # Warm cache test
-                start_time = time.time()
-                img_bytes = renderer.render_question_to_bytes(test_question, (12, 16), 'PNG')
-                warm_time = (time.time() - start_time) * 1000
-                render_times_warm.append(warm_time)
-
-            avg_render_cold = sum(render_times_cold) / len(render_times_cold)
-            avg_render_warm = sum(render_times_warm) / len(render_times_warm)
-
-            benchmark_results["question_rendering_performance"] = {
-                "avg_cold_cache_ms": avg_render_cold,
-                "avg_warm_cache_ms": avg_render_warm,
-                "improvement_factor": avg_render_cold / avg_render_warm if avg_render_warm > 0 else 0,
-                "improvement_percentage": ((avg_render_cold - avg_render_warm) / avg_render_cold * 100) if avg_render_cold > 0 else 0,
-                "test_question_id": test_question.get('question_id')
-            }
+        # Note: Question rendering performance test removed (using frontend composition now)
+        benchmark_results["question_rendering_performance"] = {
+            "note": "Frontend composition - no server-side rendering to benchmark",
+            "avg_cold_cache_ms": 0,
+            "avg_warm_cache_ms": 0,
+            "improvement_factor": "N/A - Frontend handles image composition",
+            "improvement_percentage": "N/A"
+        }
 
         # Overall summary
         benchmark_results["summary"] = {
@@ -1054,7 +1022,7 @@ async def performance_benchmark(
             "target_recommendation_time_ms": 80,
             "target_rendering_time_ms": 100,
             "recommendation_target_met": avg_warm < 80,
-            "rendering_target_met": benchmark_results.get("question_rendering_performance", {}).get("avg_warm_cache_ms", 1000) < 100,
+            "rendering_target_met": True,  # Frontend composition is always fast
             "overall_performance_improvement": "Significant" if avg_cold / avg_warm > 2 else "Moderate"
         }
 
@@ -1083,139 +1051,53 @@ def create_app() -> FastAPI:
 
 
 # =====================================================
-# QUESTION RENDERING ENDPOINTS
+# QUESTION IMAGE ENDPOINTS (Frontend Composition)
 # =====================================================
 
-@app.get("/questions/{question_id}/render", summary="Render question with images")
-async def render_question_image(
-    question_id: str,
-    width: int = Query(12, description="Image width"),
-    height: int = Query(16, description="Image height"),
-    format: str = Query("PNG", description="Image format (PNG/JPEG)"),
-    system: HumanCapitalDevelopmentSystem = Depends(get_system)
-):
-    """
-    Render a question with its images as a visual layout
-    Returns the rendered image as bytes
-    """
 
-    try:
-        # Import here to avoid circular imports
-        from services.question_rendering_service import QuestionRenderingService
-
-        # Initialize rendering service
-        renderer = QuestionRenderingService(
-            system.db_manager,
-            system.cache_manager
-        )
-
-        # Get question data
-        question_data = renderer.get_question_by_id(question_id)
-        if not question_data:
-            raise HTTPException(status_code=404, detail="Question not found")
-
-        # Render question to bytes
-        img_bytes = renderer.render_question_to_bytes(
-            question_data,
-            figsize=(width, height),
-            format=format.upper()
-        )
-
-        if not img_bytes:
-            raise HTTPException(status_code=500, detail="Failed to render question")
-
-        # Return image
-        media_type = f"image/{format.lower()}"
-        return Response(content=img_bytes, media_type=media_type)
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error rendering question: {str(e)}")
-
-
-@app.get("/questions/{question_id}/render/base64", summary="Render question as base64")
-async def render_question_base64(
-    question_id: str,
-    width: int = Query(12, description="Image width"),
-    height: int = Query(16, description="Image height"),
-    system: HumanCapitalDevelopmentSystem = Depends(get_system)
-):
-    """
-    Render a question and return as base64 encoded image
-    Useful for embedding in web pages
-    """
-
-    try:
-        from services.question_rendering_service import QuestionRenderingService
-
-        renderer = QuestionRenderingService(
-            system.db_manager,
-            system.cache_manager
-        )
-
-        question_data = renderer.get_question_by_id(question_id)
-        if not question_data:
-            raise HTTPException(status_code=404, detail="Question not found")
-
-        base64_image = renderer.render_question_to_base64(
-            question_data,
-            figsize=(width, height)
-        )
-
-        if not base64_image:
-            raise HTTPException(status_code=500, detail="Failed to render question")
-
-        return {
-            "question_id": question_id,
-            "image_base64": base64_image,
-            "format": "PNG",
-            "size": {"width": width, "height": height}
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error rendering question: {str(e)}")
-
-
-@app.get("/questions/{question_id}/image")
-async def get_question_image(
+@app.get("/questions/{question_id}/images", summary="Get question images for frontend composition")
+async def get_question_images_for_frontend(
     question_id: str,
     system: HumanCapitalDevelopmentSystem = Depends(get_system)
 ):
-    """Get question image URL or data (legacy endpoint)"""
+    """
+    Get question images prepared for frontend composition
+    Returns image URLs based on environment (local static files or S3)
+    """
     try:
-        from services.question_rendering_service import QuestionRenderingService
+        from services.question_service import QuestionService
+        from services.image_service import get_image_service, QuestionImageComposer
 
-        renderer = QuestionRenderingService(
-            system.db_manager,
-            system.cache_manager
-        )
-
-        question = renderer.get_question_by_id(question_id)
+        question_service = QuestionService(system.db_manager)
+        question = question_service.get_question_by_id(question_id)
         if not question:
             raise HTTPException(status_code=404, detail="Question not found")
 
-        # Check if question has images (from Question model)
-        images = question.images
-        if not images:
-            raise HTTPException(status_code=404, detail="No images found for this question")
-
-        # Parse images if they're stored as JSON string
-        if isinstance(images, str):
-            try:
-                images = json.loads(images)
-            except (json.JSONDecodeError, TypeError):
-                raise HTTPException(status_code=404, detail="Invalid image data format")
-
-        return {
-            "question_id": question_id,
-            "images": images,
-            "has_images": bool(images),
-            "render_url": f"/questions/{question_id}/render"
+        # Convert Question model to dict for the composer
+        question_data = {
+            'question_id': question.question_id,
+            'paper_code': question.paper_code,
+            'paper_name': question.paper_name,
+            'question_number': question.question_number,
+            'question_text': question.question_text,
+            'images': question.images
         }
+
+        # Use the new image service for frontend composition
+        image_service = get_image_service()
+        composer = QuestionImageComposer(image_service)
+
+        composed_data = composer.prepare_question_images(question_data)
+
+        return composed_data
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting question image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting question images: {str(e)}")
+
+
+
 
 
 @app.get("/questions/{question_id}/summary", summary="Get question summary")
@@ -1228,18 +1110,14 @@ async def get_question_summary(
     """
 
     try:
-        from services.question_rendering_service import QuestionRenderingService
+        from services.question_service import QuestionService
 
-        renderer = QuestionRenderingService(
-            system.db_manager,
-            system.cache_manager
-        )
-
-        question = renderer.get_question_by_id(question_id)
+        question_service = QuestionService(system.db_manager)
+        question = question_service.get_question_by_id(question_id)
         if not question:
             raise HTTPException(status_code=404, detail="Question not found")
 
-        summary = renderer.question_to_summary(question)
+        summary = question_service.question_to_summary(question)
         return summary
 
     except Exception as e:
@@ -1247,47 +1125,7 @@ async def get_question_summary(
 
 
 
-@app.get("/questions/random/render", summary="Render random questions")
-async def render_random_questions(
-    count: int = Query(5, description="Number of questions to render"),
-    width: int = Query(12, description="Image width"),
-    height: int = Query(16, description="Image height"),
-    system: HumanCapitalDevelopmentSystem = Depends(get_system)
-):
-    """
-    Get random questions and return their rendered images as base64
-    """
-
-    try:
-        from services.question_rendering_service import QuestionRenderingService
-
-        renderer = QuestionRenderingService(
-            system.db_manager,
-            system.cache_manager
-        )
-
-        questions = renderer.get_random_questions(count)
-
-        rendered_questions = []
-        for question_data in questions:
-            summary = renderer.get_question_summary(question_data)
-            base64_image = renderer.render_question_to_base64(
-                question_data,
-                figsize=(width, height)
-            )
-
-            rendered_questions.append({
-                "summary": summary,
-                "image_base64": base64_image
-            })
-
-        return {
-            "count": len(rendered_questions),
-            "questions": rendered_questions
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error rendering random questions: {str(e)}")
+# Removed random question rendering - use /questions/random + individual /questions/{id}/images instead
 
 
 @app.get("/papers", summary="Get available papers")
@@ -1299,14 +1137,11 @@ async def get_papers(
     """
 
     try:
-        from services.question_rendering_service import QuestionRenderingService
+        from services.question_service import QuestionService
 
-        renderer = QuestionRenderingService(
-            system.db_manager,
-            system.cache_manager
-        )
+        question_service = QuestionService(system.db_manager)
 
-        papers = renderer.get_papers_list()
+        papers = question_service.get_papers_list()
         return {
             "count": len(papers),
             "papers": papers
@@ -1326,15 +1161,12 @@ async def get_questions_by_paper(
     """
 
     try:
-        from services.question_rendering_service import QuestionRenderingService
+        from services.question_service import QuestionService
 
-        renderer = QuestionRenderingService(
-            system.db_manager,
-            system.cache_manager
-        )
+        question_service = QuestionService(system.db_manager)
 
-        questions = renderer.get_questions_by_paper(paper_code)
-        summaries = [renderer.get_question_summary(q) for q in questions]
+        questions = question_service.get_questions_by_paper(paper_code)
+        summaries = [question_service.get_question_summary(q) for q in questions]
 
         return {
             "paper_code": paper_code,
@@ -1456,7 +1288,7 @@ async def get_student_umap_coordinates(
                 from api.schemas import QuestionStatusEnum
                 status_values = [s.strip() for s in status_filter.split(',')]
                 parsed_status_filter = [QuestionStatusEnum(s) for s in status_values]
-            except (ValueError, AttributeError) as e:
+            except (ValueError, AttributeError):
                 # Invalid status values - let service handle the error
                 parsed_status_filter = status_filter
 

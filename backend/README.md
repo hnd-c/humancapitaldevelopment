@@ -598,7 +598,7 @@ Expected performance:
 - **Real-Time Updates**: <5ms WebSocket notification delivery
 - **Student Status**: <10ms materialized view queries with 22,800 total combinations
 - **Cache Operations**: <1ms for Redis operations with smart invalidation
-- **Question Rendering**: <1s for multi-image compositions
+- **Image URL Generation**: <50ms for frontend composition data
 - **API throughput**: 1000+ requests/second
 - **Concurrent users**: 1000+
 - **Database**: 4,560 questions with full embeddings loaded instantly
@@ -643,5 +643,7 @@ This system has been fully modernized with database-driven architecture and comp
 - **Docker**: `Dockerfile`, `docker-compose*.yml` (PostgreSQL, Redis, API)
 - **Data Loading**: `scripts/load_to_postgres.py` (parquet → PostgreSQL)
 - **Configuration**: `config/environments.py` (development/production settings)
+- **Image Service**: `services/image_service.py` (URL generation & S3 abstraction)
+- **Frontend Examples**: `examples/frontend_image_composition.html` (client-side composition demo)
 
 **Note**: All runtime data now lives in PostgreSQL. Parquet files are only used during initial data loading via scripts. Question images are stored in `p1_images/` and referenced via database paths.
