@@ -6,10 +6,10 @@ Uses existing schema: student_question_history, student_paper_enrollments, stude
 
 import time
 import uuid
-import json
 from typing import Dict, Any, Optional
 from data.database_manager import DatabaseManager
 from data.models import build_question_query, resolve_question_id
+from data.serialization import create_cache_key, serialize_for_cache, deserialize_from_cache
 from services.cache_service import CacheService
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
@@ -49,11 +49,10 @@ class StudentInteractionService:
                 'estimated_duration_minutes': target_questions * 3  # 3 minutes per question estimate
             }
 
-            from data.serialization import serialize_for_cache
-
             cached_data = serialize_for_cache(session_data, compress_large=True)
+            cache_key = create_cache_key("session", session_id)
             self.cache_service.redis.setex(
-                f"session:{session_id}",
+                cache_key,
                 3600,  # 1 hour TTL
                 cached_data
             )
@@ -88,11 +87,10 @@ class StudentInteractionService:
                 'status': 'in_progress'
             }
 
-            from data.serialization import serialize_for_cache
-
             cached_data = serialize_for_cache(attempt_data, compress_large=False)
+            cache_key = create_cache_key("attempt", attempt_id)
             self.cache_service.redis.setex(
-                f"attempt:{attempt_id}",
+                cache_key,
                 1800,  # 30 minutes TTL
                 cached_data
             )
@@ -253,9 +251,9 @@ class StudentInteractionService:
         """Get progress for a learning session"""
         try:
             # Try cache first with optimized deserialization
-            cached_session = self.cache_service.redis.get(f"session:{session_id}")
+            cache_key = create_cache_key("session", session_id)
+            cached_session = self.cache_service.redis.get(cache_key)
             if cached_session:
-                from data.serialization import deserialize_from_cache
                 session_data = deserialize_from_cache(cached_session)
             else:
                 # Get from database - use student history to reconstruct session
@@ -344,9 +342,9 @@ class StudentInteractionService:
         """Get attempt data from cache or database"""
         try:
             # Try cache first with optimized deserialization
-            cached_attempt = self.cache_service.redis.get(f"attempt:{attempt_id}")
+            cache_key = create_cache_key("attempt", attempt_id)
+            cached_attempt = self.cache_service.redis.get(cache_key)
             if cached_attempt:
-                from data.serialization import deserialize_from_cache
                 return deserialize_from_cache(cached_attempt)
 
             # Get from database

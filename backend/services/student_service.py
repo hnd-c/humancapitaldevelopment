@@ -34,10 +34,10 @@ class StudentService:
         try:
             # Try cache first with optimized deserialization
             if self.cache_service:
-                from data.serialization import deserialize_from_cache
+                from data.serialization import deserialize_from_cache, create_cache_key
 
-                # Use simple key format for consistency
-                cache_key = f"student:{student_id}"
+                # Use centralized cache key generation
+                cache_key = create_cache_key("student", student_id)
                 cached_data = self.cache_service.redis.get(cache_key)
                 if cached_data:
                     try:
@@ -84,10 +84,10 @@ class StudentService:
 
                     # Cache the result with optimized serialization
                     if self.cache_service:
-                        from data.serialization import serialize_for_cache
+                        from data.serialization import serialize_for_cache, create_cache_key
 
-                        # Use simple key format for consistency
-                        cache_key = f"student:{student_id}"
+                        # Use centralized cache key generation
+                        cache_key = create_cache_key("student", student_id)
                         cached_data = serialize_for_cache(student, compress_large=False)
                         self.cache_service.redis.setex(cache_key, 3600, cached_data)
 
@@ -148,10 +148,10 @@ class StudentService:
                 weaknesses=weaknesses
             )
 
-            # Cache the performance analysis as dict
+            # Cache the performance analysis using centralized serialization
             if self.cache_service:
-                import json
-                cache_key = f"performance:{student_id}"
+                from data.serialization import serialize_for_cache, create_cache_key
+                cache_key = create_cache_key("performance", student_id)
                 performance_dict = {
                     "student_id": performance.student_id,
                     "total_attempts": performance.total_attempts,
@@ -162,10 +162,8 @@ class StudentService:
                     "strengths": performance.strengths,
                     "weaknesses": performance.weaknesses
                 }
-                self.cache_service.redis.setex(
-                    cache_key, 1800,  # 30 minutes
-                    json.dumps(performance_dict, default=str)
-                )
+                cached_data = serialize_for_cache(performance_dict, compress_large=False)
+                self.cache_service.redis.setex(cache_key, 1800, cached_data)  # 30 minutes
 
             return performance
 

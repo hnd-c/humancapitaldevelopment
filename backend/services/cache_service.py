@@ -44,8 +44,8 @@ class CacheService:
     def get_cached_recommendations(self, student_id: str, objective: str) -> Optional[List[Recommendation]]:
         """Get cached recommendations for a student and objective with optimized deserialization"""
         try:
-            # Use simple key format for consistency
-            cache_key = f"recommendations:{student_id}:{objective}"
+            # Use centralized cache key generation
+            cache_key = create_cache_key("recommendations", student_id, objective)
             cached_data = self.redis.get(cache_key)
 
             if cached_data:
@@ -64,8 +64,8 @@ class CacheService:
     def cache_recommendations(self, student_id: str, objective: str, recommendations: List[Recommendation], ttl: int = 1800) -> bool:
         """Cache recommendations with optimized serialization and compression"""
         try:
-            # Use simple key format for consistency
-            cache_key = f"recommendations:{student_id}:{objective}"
+            # Use centralized cache key generation
+            cache_key = create_cache_key("recommendations", student_id, objective)
 
             start_time = time.time()
             serialized_data = serialize_for_cache(recommendations, compress_large=True)
@@ -96,8 +96,8 @@ class CacheService:
     def get_cached_student_history(self, student_id: str) -> Optional[List[Dict[str, Any]]]:
         """Get cached student history with optimized deserialization"""
         try:
-            # Use simple key format for consistency
-            cache_key = f"student_history:{student_id}"
+            # Use centralized cache key generation
+            cache_key = create_cache_key("student_history", student_id)
             cached_data = self.redis.get(cache_key)
 
             if cached_data:
@@ -116,8 +116,8 @@ class CacheService:
     def cache_student_history(self, student_id: str, history: List[Dict[str, Any]], ttl: int = 3600) -> bool:
         """Cache student history with optimized serialization"""
         try:
-            # Use simple key format for consistency
-            cache_key = f"student_history:{student_id}"
+            # Use centralized cache key generation
+            cache_key = create_cache_key("student_history", student_id)
 
             start_time = time.time()
             serialized_data = serialize_for_cache(history, compress_large=True)
@@ -133,8 +133,8 @@ class CacheService:
     def get_cached_enriched_vector(self, student_id: str, objective: str) -> Optional[Any]:
         """Get cached enriched vector with optimized numpy array handling"""
         try:
-            # Use simple key format for consistency
-            cache_key = f"enriched_vector:{student_id}:{objective}"
+            # Use centralized cache key generation
+            cache_key = create_cache_key("enriched_vector", student_id, objective)
             cached_data = self.redis.get(cache_key)
 
             if cached_data:
@@ -153,8 +153,8 @@ class CacheService:
     def cache_enriched_vector(self, student_id: str, objective: str, vector: Any, ttl: int = 1800) -> bool:
         """Cache enriched vector with optimized numpy array serialization"""
         try:
-            # Use simple key format for consistency
-            cache_key = f"enriched_vector:{student_id}:{objective}"
+            # Use centralized cache key generation
+            cache_key = create_cache_key("enriched_vector", student_id, objective)
 
             start_time = time.time()
             serialized_data = serialize_for_cache(vector, compress_large=True)
@@ -204,7 +204,7 @@ class CacheService:
     def get_student_cache_version(self, student_id: str) -> Optional[str]:
         """Get the current cache version for a student (based on last activity)"""
         try:
-            cache_key = f"student_version:{student_id}"
+            cache_key = create_cache_key("student_version", student_id)
             version = self.redis.get(cache_key)
             if version:
                 # Handle both string and bytes responses
@@ -225,7 +225,7 @@ class CacheService:
             if version is None:
                 version = str(time.time())
 
-            cache_key = f"student_version:{student_id}"
+            cache_key = create_cache_key("student_version", student_id)
             self.redis.set(cache_key, version)
             return True
         except Exception as e:
@@ -374,7 +374,7 @@ class CacheService:
                         )
 
                         # Cache the results with optimized serialization
-                        cache_key = f"similarities:{question_id}"
+                        cache_key = create_cache_key("similarities", question_id)
                         serialized_data = serialize_for_cache(similar_questions, compress_large=True)
                         self.redis.setex(cache_key, 3600, serialized_data)  # 1 hour
 

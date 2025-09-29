@@ -125,7 +125,8 @@ class DatabaseManager:
 
     def get_student_history_optimized(self, student_id, limit=1000):
         """Optimized student history with caching"""
-        cache_key = f"student_history:{student_id}:{limit}"
+        from data.serialization import create_cache_key
+        cache_key = create_cache_key("student_history", student_id, limit=limit)
 
         # Try Redis cache first
         cached = self.redis_client.get(cache_key)
@@ -147,8 +148,10 @@ class DatabaseManager:
             cursor.execute(query, (student_id, limit))
             results = cursor.fetchall()
 
-        # Cache for 5 minutes
-        self.redis_client.setex(cache_key, 300, json.dumps(results, default=str))
+        # Cache for 5 minutes using centralized serialization
+        from data.serialization import serialize_for_cache
+        cached_data = serialize_for_cache(results, compress_large=False)
+        self.redis_client.setex(cache_key, 300, cached_data)
         return results
 
     def find_similar_questions_vector(self, query_embedding, similarity_threshold=0.7, limit=10):
@@ -169,7 +172,8 @@ class DatabaseManager:
 
     async def get_student_history_optimized_async(self, student_id, limit=1000):
         """Async version of optimized student history with caching"""
-        cache_key = f"student_history:{student_id}:{limit}"
+        from data.serialization import create_cache_key
+        cache_key = create_cache_key("student_history", student_id, limit=limit)
 
         # Try Redis cache first
         cached = self.redis_client.get(cache_key)
@@ -193,8 +197,10 @@ class DatabaseManager:
             # Convert asyncpg.Record to dict
             results = [dict(row) for row in results]
 
-            # Cache for 5 minutes
-            self.redis_client.setex(cache_key, 300, json.dumps(results, default=str))
+            # Cache for 5 minutes using centralized serialization
+            from data.serialization import serialize_for_cache
+            cached_data = serialize_for_cache(results, compress_large=False)
+            self.redis_client.setex(cache_key, 300, cached_data)
             return results
 
         finally:

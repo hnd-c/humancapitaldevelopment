@@ -10,13 +10,13 @@ This service handles:
 """
 
 import time
-import json
 from typing import Dict, List, Optional, Tuple, Any
 from enum import Enum
 from dataclasses import dataclass
 from datetime import datetime
 
 from data.database_manager import DatabaseManager
+from data.serialization import create_cache_key, serialize_for_cache, deserialize_from_cache
 from services.cache_service import CacheService
 from psycopg2.extras import RealDictCursor
 
@@ -122,7 +122,7 @@ class UMAPVisualizationService:
             str(include_metadata),
             str(include_attempt_details)
         ]
-        cache_key = f"student_umap:{':'.join(str(p) for p in cache_params)}"
+        cache_key = create_cache_key("student_umap", *cache_params)
 
         # Try cache first
         if self.cache_service:
@@ -239,7 +239,6 @@ class UMAPVisualizationService:
                 # Cache for 2 minutes (shorter TTL due to dynamic nature)
                 if self.cache_service:
                     try:
-                        from data.serialization import serialize_for_cache
                         cached_data = serialize_for_cache(result, compress_large=True)
                         self.cache_service.redis.setex(cache_key, 120, cached_data)
                     except Exception as e:
@@ -272,7 +271,10 @@ class UMAPVisualizationService:
             Dictionary with coordinates and cluster information
         """
 
-        cache_key = f"basic_umap:{offset}:{limit}:{str(sorted(cluster_filter or []))}:{str(spatial_bounds)}:{include_metadata}"
+        cache_key = create_cache_key("basic_umap", offset, limit,
+                                   cluster_filter=sorted(cluster_filter or []),
+                                   spatial_bounds=spatial_bounds,
+                                   include_metadata=include_metadata)
 
         # Try cache first
         if self.cache_service:
@@ -378,7 +380,6 @@ class UMAPVisualizationService:
                 # Cache for 5 minutes (longer TTL for static data)
                 if self.cache_service:
                     try:
-                        from data.serialization import serialize_for_cache
                         cached_data = serialize_for_cache(result, compress_large=True)
                         self.cache_service.redis.setex(cache_key, 300, cached_data)
                     except Exception as e:
@@ -396,7 +397,7 @@ class UMAPVisualizationService:
     ) -> Dict[str, Any]:
         """Get current status of a specific question for a student"""
 
-        cache_key = f"question_status:{student_id}:{question_id}"
+        cache_key = create_cache_key("question_status", student_id, question_id)
 
         if self.cache_service:
             try:
@@ -432,7 +433,6 @@ class UMAPVisualizationService:
                 # Cache for 1 minute
                 if self.cache_service:
                     try:
-                        from data.serialization import serialize_for_cache
                         cached_data = serialize_for_cache(status_data, compress_large=False)
                         self.cache_service.redis.setex(cache_key, 60, cached_data)
                     except Exception as e:
@@ -452,7 +452,6 @@ class UMAPVisualizationService:
             try:
                 cached_value = self.cache_service.redis.get(cache_key)
                 if cached_value:
-                    from data.serialization import deserialize_from_cache
                     cached_bounds = deserialize_from_cache(cached_value)
                     return UMAPBounds(**cached_bounds)
             except Exception as e:
@@ -485,7 +484,6 @@ class UMAPVisualizationService:
                         "center_y": bounds.center_y
                     }
                     try:
-                        from data.serialization import serialize_for_cache
                         cached_data = serialize_for_cache(bounds_dict, compress_large=False)
                         self.cache_service.redis.setex(cache_key, 3600, cached_data)
                     except Exception as e:
@@ -511,7 +509,7 @@ class UMAPVisualizationService:
                 # Call the database function to refresh this student's data
                 # Note: The function internally handles VARCHAR to INTEGER casting
                 cursor.execute("SELECT refresh_student_status_for_student(%s)", [student_id_str])
-                result = cursor.fetchone()
+                cursor.fetchone()  # Execute but don't store unused result
                 conn.commit()
 
                 print(f"✅ Successfully refreshed student status for {student_id_str}")
