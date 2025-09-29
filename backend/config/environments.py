@@ -24,7 +24,7 @@ class DevelopmentConfig(SystemConfig):
                 port=5432,
                 database="human_capital_dev",
                 user="hcd_user",
-                password="your_secure_password_here",
+                password=os.getenv("DB_PASSWORD", ""),
                 connection_pool_size=5,
                 max_overflow=10
             ),
@@ -65,7 +65,7 @@ class StagingConfig(SystemConfig):
                 port=int(os.getenv("STAGING_DB_PORT", 5432)),
                 database=os.getenv("STAGING_DB_NAME", "human_capital_staging"),
                 user=os.getenv("STAGING_DB_USER", "hcd_staging"),
-                password=os.getenv("STAGING_DB_PASSWORD", "staging_password"),
+                password=os.getenv("STAGING_DB_PASSWORD", ""),
                 connection_pool_size=10,
                 max_overflow=20
             ),
@@ -196,7 +196,7 @@ class TestConfig(SystemConfig):
                 port=5432,
                 database="human_capital_test",
                 user="hcd_test",
-                password="test_password",
+                password=os.getenv("TEST_DB_PASSWORD", ""),
                 connection_pool_size=2,
                 max_overflow=5
             ),

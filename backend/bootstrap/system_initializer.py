@@ -15,6 +15,16 @@ import sys
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("📄 .env file loaded successfully")
+except ImportError:
+    print("⚠️  python-dotenv not installed, using system environment variables only")
+except Exception as e:
+    print(f"⚠️  Error loading .env file: {e}")
+
 # Import existing components
 from data.database_manager import DatabaseManager
 from services.cache_service import CacheService
@@ -34,12 +44,42 @@ class SystemInitializer:
         print("🚀 Initializing Human Capital Development System...")
         print("=" * 60)
 
+        # Debug environment variables
+        self._debug_environment_variables()
+
         # Initialize components in order
         self._initialize_database_layer()
         self._initialize_monitoring()
 
         print(f"✅ System initialized successfully in {time.time() - self.start_time:.2f}s")
         print("=" * 60)
+
+    def _debug_environment_variables(self):
+        """Debug environment variables for troubleshooting"""
+        print("🔍 Environment Variables Debug:")
+
+        # Database variables
+        db_vars = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD']
+        for var in db_vars:
+            value = os.getenv(var, 'NOT_SET')
+            if var == 'DB_PASSWORD':
+                # Mask password but show if it's set
+                display_value = '***MASKED***' if value != 'NOT_SET' and value else 'NOT_SET'
+            else:
+                display_value = value
+            print(f"  {var}: {display_value}")
+
+        # Other important variables
+        other_vars = ['ENVIRONMENT', 'DEBUG', 'JWT_SECRET_KEY', 'REDIS_HOST', 'REDIS_PASSWORD']
+        for var in other_vars:
+            value = os.getenv(var, 'NOT_SET')
+            if 'SECRET' in var or 'PASSWORD' in var:
+                display_value = '***MASKED***' if value != 'NOT_SET' and value else 'NOT_SET'
+            else:
+                display_value = value
+            print(f"  {var}: {display_value}")
+
+        print()
 
     def _initialize_database_layer(self):
         """Initialize database and caching layer"""

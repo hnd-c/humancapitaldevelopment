@@ -21,7 +21,7 @@ class DatabaseConfig:
     port: int = 5432
     database: str = "human_capital_dev"
     user: str = "hcd_user"
-    password: str = "your_secure_password_here"
+    password: str = ""  # Must be set via DB_PASSWORD environment variable
     connection_pool_size: int = 20
     max_overflow: int = 30
     pool_timeout: int = 30
