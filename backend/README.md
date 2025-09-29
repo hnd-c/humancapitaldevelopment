@@ -129,7 +129,7 @@ export REDIS_PORT=6379
 
 ```bash
 # Option 1: Using Docker (recommended)
-docker-compose up -d postgres redis
+docker-compose up -d postgres redis-cache redis-vectors
 
 # Option 2: Manual database setup
 createdb human_capital_dev
