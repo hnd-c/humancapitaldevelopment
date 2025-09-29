@@ -8,6 +8,7 @@ import time
 from typing import Dict, Any, Optional
 from data.database_manager import DatabaseManager
 from data.models import build_question_query
+from data.time_utils import TimeCalculator, calculate_time_metrics, categorize_timing
 from psycopg2.extras import RealDictCursor
 
 
@@ -143,32 +144,8 @@ class AnswerValidationService:
         return str(student_answer).strip() == str(correct_answer).strip()
 
     def calculate_time_metrics(self, start_time: float, end_time: float = None) -> Dict[str, Any]:
-        """Calculate timing metrics for an attempt"""
-        if end_time is None:
-            end_time = time.time()
-
-        time_spent = end_time - start_time
-
-        return {
-            'time_spent_seconds': time_spent,
-            'time_spent_minutes': time_spent / 60.0,
-            'start_time': start_time,
-            'end_time': end_time,
-            'timing_category': self._categorize_timing(time_spent)
-        }
-
-    def _categorize_timing(self, time_spent: float) -> str:
-        """Categorize response time"""
-        if time_spent < 30:
-            return 'very_fast'
-        elif time_spent < 60:
-            return 'fast'
-        elif time_spent < 120:
-            return 'normal'
-        elif time_spent < 300:
-            return 'slow'
-        else:
-            return 'very_slow'
+        """Calculate timing metrics for an attempt using centralized utilities"""
+        return calculate_time_metrics(start_time, end_time)
 
     def get_question_difficulty_timing(self, question_id: str) -> Dict[str, Any]:
         """Get average timing data for a question to set expectations - supports both question ID formats"""
@@ -207,11 +184,14 @@ class AnswerValidationService:
 
                 result = cursor.fetchone()
                 if result and result['attempt_count'] > 0:
+                    avg_time = float(result['avg_time'] or 0)
                     return {
-                        'avg_time_seconds': float(result['avg_time'] or 0),
+                        'avg_time_seconds': avg_time,
+                        'avg_time_formatted': TimeCalculator.format_duration(avg_time),
                         'median_time_seconds': float(result['median_time'] or 0),
                         'attempt_count': int(result['attempt_count']),
                         'success_rate': float(result['success_rate'] or 0),
+                        'timing_category': categorize_timing(avg_time),
                         'suggested_time_limit': float(result['median_time'] or 120) * 2  # 2x median as suggestion
                     }
                 else:
@@ -226,9 +206,11 @@ class AnswerValidationService:
             print(f"Error getting timing data: {e}")
             return {
                 'avg_time_seconds': 0,
+                'avg_time_formatted': '0s',
                 'median_time_seconds': 0,
                 'attempt_count': 0,
                 'success_rate': 0,
+                'timing_category': categorize_timing(0),
                 'suggested_time_limit': 120
             }
 

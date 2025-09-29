@@ -605,6 +605,10 @@ async def start_learning_session(
                     converted_recs.append(dict(rec.__dict__))
             session_data['recommendations'] = converted_recs
 
+        # Ensure estimated_duration_minutes is an integer
+        if 'estimated_duration_minutes' in session_data and session_data['estimated_duration_minutes'] is not None:
+            session_data['estimated_duration_minutes'] = int(session_data['estimated_duration_minutes'])
+
         return StudentSessionResponse(**session_data)
 
     except Exception as e:

@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional
 from data.database_manager import DatabaseManager
 from data.models import build_question_query, resolve_question_id
 from data.serialization import create_cache_key, serialize_for_cache, deserialize_from_cache
+from data.time_utils import TimeCalculator, generate_timing_feedback
 from services.cache_service import CacheService
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
@@ -31,7 +32,7 @@ class StudentInteractionService:
         try:
             # Get recommendations for the session
             from services.recommendation_service import OptimizedRecommendationEngine
-            engine = OptimizedRecommendationEngine(self.db_manager, lazy_load=True)
+            engine = OptimizedRecommendationEngine(self.db_manager, self.cache_service, lazy_load=True)
             recommendations = engine.recommend_questions_optimized(
                 student_id=student_id,
                 objective=objective,
@@ -46,7 +47,7 @@ class StudentInteractionService:
                 'session_type': session_type,
                 'recommendations': recommendations,  # Keep as original dataclass objects
                 'session_started_at': session_start,
-                'estimated_duration_minutes': target_questions * 3  # 3 minutes per question estimate
+                'estimated_duration_minutes': int(TimeCalculator.estimate_session_duration(target_questions))
             }
 
             cached_data = serialize_for_cache(session_data, compress_large=True)
@@ -125,7 +126,7 @@ class StudentInteractionService:
             if time_spent_seconds is None:
                 # Use started_at if available, otherwise use a default time
                 started_at = attempt_data.get('started_at', time.time() - 120)  # Default 2 minutes ago
-                time_spent_seconds = time.time() - started_at
+                time_spent_seconds = TimeCalculator.calculate_time_spent(started_at)
 
             # Auto-validate answer if enabled and is_correct not provided
             validation_result = None
@@ -220,8 +221,8 @@ class StudentInteractionService:
                 self._notify_umap_status_change(student_id, question_id, status, is_correct, metadata)
             )
 
-            # Generate feedback
-            feedback = self._generate_feedback(is_correct, confidence_level, time_spent_seconds)
+            # Generate feedback using centralized utility
+            feedback = generate_timing_feedback(is_correct, time_spent_seconds, confidence_level)
 
             submission_data = {
                 'submission_id': submission_id,
@@ -427,19 +428,9 @@ class StudentInteractionService:
 
     def _generate_feedback(self, is_correct: bool, confidence: Optional[float],
                           time_spent: float) -> str:
-        """Generate feedback based on performance"""
-        if is_correct:
-            if time_spent < 30:
-                return "Excellent! Quick and correct."
-            elif time_spent < 120:
-                return "Good work! Correct answer."
-            else:
-                return "Correct! Consider reviewing the topic for faster recall."
-        else:
-            if confidence and confidence > 0.7:
-                return "Incorrect, but you seemed confident. Review the concept carefully."
-            else:
-                return "Incorrect. Take time to understand the underlying concept."
+        """Generate feedback based on performance - DEPRECATED: Use centralized generate_timing_feedback"""
+        # Redirect to centralized utility for consistency
+        return generate_timing_feedback(is_correct, time_spent, confidence)
 
     async def _notify_umap_status_change(
         self,
