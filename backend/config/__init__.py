@@ -2,11 +2,11 @@
 Configuration module for application settings.
 
 This module handles:
-- Main configuration settings
-- Environment-specific configs
+- Consolidated configuration system
+- Environment-specific profiles
+- Comprehensive validation
 """
 
-from .settings import *
-from .environments import *
+from .config import *
 
 __version__ = "1.0.0"

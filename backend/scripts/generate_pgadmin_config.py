@@ -14,8 +14,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
 
-from config.environments import load_config_for_environment
-from config.settings import generate_pgadmin_config
+from config.config import load_config_for_environment, generate_pgadmin_config
 
 
 def main():

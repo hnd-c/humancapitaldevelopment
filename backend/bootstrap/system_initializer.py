@@ -29,7 +29,7 @@ except Exception as e:
 from data.database_manager import DatabaseManager
 from services.cache_service import CacheService
 from services.performance_service import PerformanceMonitor
-from config.environments import SystemConfig
+from config.config import SystemConfig
 
 
 class SystemInitializer:

@@ -18,7 +18,7 @@ import uvicorn
 
 # Import our system components
 from main import HumanCapitalDevelopmentSystem
-from config.environments import load_config_for_environment, is_development
+from config.config import load_config_for_environment, is_development
 from api.schemas import (
     RecommendationRequest, RecommendationResponse,
     StudentSessionRequest, StudentSessionResponse,

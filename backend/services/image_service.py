@@ -12,7 +12,7 @@ This service handles:
 import os
 from typing import List, Dict, Any
 from pathlib import Path
-from config.environments import is_production, is_development, get_environment
+from config.config import is_production, is_development, get_environment
 
 
 class ImageService:

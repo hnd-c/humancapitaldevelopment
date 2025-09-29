@@ -103,7 +103,7 @@ cp env.example .env
 nano .env
 
 # Test configuration loading
-python -c "from config.environments import load_config_for_environment; print('Config loaded successfully')"
+python -c "from config.config import load_config_for_environment; print('Config loaded successfully')"
 ```
 
 ## Next Steps

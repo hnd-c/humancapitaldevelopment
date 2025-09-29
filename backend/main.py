@@ -19,7 +19,7 @@ from pathlib import Path
 # Add current directory to Python path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from config.environments import load_config_for_environment
+from config.config import load_config_for_environment
 from bootstrap.system_initializer import SystemInitializer
 from services.recommendation_service import OptimizedRecommendationEngine
 
