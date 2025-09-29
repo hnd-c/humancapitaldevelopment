@@ -18,6 +18,7 @@ from datetime import datetime
 
 from data.database_manager import DatabaseManager
 from services.cache_service import CacheService
+from psycopg2.extras import RealDictCursor
 
 
 class QuestionStatus(str, Enum):
@@ -134,7 +135,7 @@ class UMAPVisualizationService:
 
         try:
             with self.db_manager.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 # Build dynamic SELECT fields
                 select_fields = [
@@ -282,7 +283,7 @@ class UMAPVisualizationService:
 
         try:
             with self.db_manager.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 # Build SELECT fields
                 select_fields = ["question_id", "x_coord", "y_coord", "cluster_id", "cluster_confidence"]
@@ -401,7 +402,7 @@ class UMAPVisualizationService:
 
         try:
             with self.db_manager.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 query = """
                     SELECT status, color_code, attempt_count, correct_count,

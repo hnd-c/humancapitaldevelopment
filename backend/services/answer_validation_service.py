@@ -5,9 +5,9 @@ Provides automated answer validation and timing mechanisms
 """
 
 import time
-import json
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, Any, Optional
 from data.database_manager import DatabaseManager
+from data.models import build_question_query
 from psycopg2.extras import RealDictCursor
 
 
@@ -23,24 +23,15 @@ class AnswerValidationService:
             with self.db_manager.get_db_connection() as conn:
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-                # Support both question_id (string) and internal_question_id (integer)
-                if question_id.isdigit():
-                    # Search by internal_question_id
-                    cursor.execute("""
-                        SELECT q.question_id, q.ms, q.combined_text, p.paper_name
-                        FROM questions q
-                        JOIN papers p ON q.paper_id = p.paper_id
-                        WHERE q.internal_question_id = %s
-                    """, (int(question_id),))
-                else:
-                    # Search by question_id string
-                    cursor.execute("""
-                        SELECT q.question_id, q.ms, q.combined_text, p.paper_name
-                        FROM questions q
-                        JOIN papers p ON q.paper_id = p.paper_id
-                        WHERE q.question_id = %s
-                    """, (question_id,))
-
+                # Use centralized question ID resolution
+                base_query = """
+                    SELECT q.question_id, q.ms, q.combined_text, p.paper_name
+                    FROM questions q
+                    JOIN papers p ON q.paper_id = p.paper_id
+                    {where_clause}
+                """
+                query, params = build_question_query(base_query, question_id)
+                cursor.execute(query, params)
                 result = cursor.fetchone()
                 if not result:
                     return None
@@ -185,10 +176,10 @@ class AnswerValidationService:
             with self.db_manager.get_db_connection() as conn:
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-                # Support both question_id (string) and internal_question_id (integer)
+                # Use centralized question ID resolution
                 if question_id.isdigit():
-                    # Search by internal_question_id
-                    cursor.execute("""
+                    # Direct query for internal_question_id
+                    query = """
                         SELECT
                             AVG(time_spent_sec) as avg_time,
                             PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY time_spent_sec) as median_time,
@@ -196,10 +187,11 @@ class AnswerValidationService:
                             AVG(CASE WHEN is_correct THEN 1.0 ELSE 0.0 END) as success_rate
                         FROM student_question_history sqh
                         WHERE sqh.internal_question_id = %s
-                    """, (int(question_id),))
+                    """
+                    params = (int(question_id),)
                 else:
-                    # Search by question_id string
-                    cursor.execute("""
+                    # Join query for question_id string
+                    query = """
                         SELECT
                             AVG(time_spent_sec) as avg_time,
                             PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY time_spent_sec) as median_time,
@@ -208,7 +200,10 @@ class AnswerValidationService:
                         FROM student_question_history sqh
                         JOIN questions q ON sqh.internal_question_id = q.internal_question_id
                         WHERE q.question_id = %s
-                    """, (question_id,))
+                    """
+                    params = (question_id,)
+
+                cursor.execute(query, params)
 
                 result = cursor.fetchone()
                 if result and result['attempt_count'] > 0:
@@ -258,13 +253,8 @@ class AnswerValidationService:
             'status': 'active'
         }
 
-        # Cache timer session
-        try:
-            from services.cache_service import CacheService
-            # We'll need to pass cache service from the calling code
-            print(f"⏱️ Created timer session: {time_limit_seconds}s limit for {question_id}")
-        except Exception as e:
-            print(f"Warning: Could not cache timer session: {e}")
+        # Cache timer session (would require cache service to be passed in)
+        print(f"⏱️ Created timer session: {time_limit_seconds}s limit for {question_id}")
 
         return timer_data
 

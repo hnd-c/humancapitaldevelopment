@@ -14,8 +14,10 @@ import time
 
 from data.models import (
     Student, StudentPerformance,
-    ModelValidator, ValidationError
+    ModelValidator, ValidationError,
+    extract_student_number
 )
+from psycopg2.extras import RealDictCursor
 
 
 class StudentService:
@@ -51,7 +53,7 @@ class StudentService:
             numeric_id = self._extract_student_number(student_id)
 
             with self.db_manager.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 query = """
                 SELECT s.student_id, s.student_name, s.student_code,
@@ -198,10 +200,10 @@ class StudentService:
         """Get student question history"""
         try:
             # Extract numeric ID if needed
-            numeric_id = self._extract_student_number(student_id)
+            numeric_id = extract_student_number(student_id)
 
             with self.db_manager.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 query = """
                 SELECT sqh.*, q.question_id
@@ -222,23 +224,7 @@ class StudentService:
             print(f"Error getting student history for {student_id}: {e}")
             return []
 
-    def _extract_student_number(self, student_id: str) -> int:
-        """Extract numeric student ID from string formats"""
-        try:
-            if isinstance(student_id, int):
-                return student_id
-            elif isinstance(student_id, str):
-                if student_id.isdigit():
-                    return int(student_id)
-                # Handle formats like "STU_001" or "student_1"
-                import re
-                match = re.search(r'(\d+)', student_id)
-                if match:
-                    return int(match.group(1))
-            return int(student_id)  # Last resort conversion
-        except (ValueError, TypeError):
-            print(f"Warning: Could not extract student number from {student_id}, using 1")
-            return 1
+# Removed _extract_student_number - now using centralized extract_student_number from data.models
 
     def _identify_strengths_weaknesses(self, cluster_performance: Dict[str, Any],
                                      time_analysis: Dict[str, Any],
@@ -335,7 +321,7 @@ class StudentService:
 
         try:
             with self.db_manager.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 # Get cluster information for the questions
                 placeholders = ','.join(['%s'] * len(question_ids))

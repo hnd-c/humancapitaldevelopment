@@ -13,13 +13,14 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query, Web
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 import uvicorn
 
 # Import our system components
 from main import HumanCapitalDevelopmentSystem
 from config.environments import load_config_for_environment, is_development
 from api.schemas import (
+    RecommendationRequest, RecommendationResponse,
     StudentSessionRequest, StudentSessionResponse,
     QuestionAttemptRequest, QuestionAttemptResponse,
     AnswerSubmissionRequest, AnswerSubmissionResponse,
@@ -31,9 +32,8 @@ from api.schemas import (
 )
 # Import data models for consistent response handling
 from data.models import (
-    RecommendationRequest as ModelRecommendationRequest,
-    RecommendationResponse as ModelRecommendationResponse,
-    ModelValidator, ValidationError
+    ModelValidator, ValidationError,
+    resolve_question_id
 )
 # Import middleware components
 from api.middleware import (
@@ -103,20 +103,8 @@ if is_development():
 
 
 # Pydantic models for API
-class RecommendationRequest(BaseModel):
-    student_id: str = Field(..., description="Student identifier")
-    objective: str = Field(default="balanced", description="Learning objective: coverage, efficiency, success_rate, balanced")
-    top_k: int = Field(default=5, ge=1, le=20, description="Number of recommendations to return")
-    use_cache: bool = Field(default=True, description="Whether to use cached results")
-
-
-class RecommendationResponse(BaseModel):
-    student_id: str
-    objective: str
-    recommendations: List[Dict[str, Any]]
-    generated_at: float
-    cache_hit: bool = False
-    response_time_ms: float
+# RecommendationRequest and RecommendationResponse are now imported from api.schemas
+# to eliminate duplication - using the comprehensive Pydantic models
 
 
 class PerformanceAnalysisResponse(BaseModel):
@@ -189,16 +177,9 @@ async def get_recommendations(
     start_time = time.time()
 
     try:
-        # Validate request using data model
-        model_request = ModelRecommendationRequest(
-            student_id=request.student_id,
-            objective=request.objective,
-            top_k=request.top_k,
-            use_cache=request.use_cache
-        )
-
+        # Pydantic handles validation automatically, but we can add additional validation if needed
         try:
-            ModelValidator.validate_recommendation_request(model_request)
+            ModelValidator.validate_recommendation_request(request)
         except ValidationError as ve:
             raise HTTPException(status_code=400, detail=f"Request validation failed: {ve}")
 
@@ -254,59 +235,57 @@ async def get_recommendations(
                 response_time_ms / 1000
             )
 
-        # Create proper response model
-        response_data = ModelRecommendationResponse(
-            student_id=request.student_id,
-            objective=request.objective,
-            recommendations=recommendations or [],
-            generated_at=time.time(),
-            cache_hit=cache_hit,
-            response_time_ms=response_time_ms,
-            metadata={
-                "total_recommendations": len(recommendations) if recommendations else 0,
-                "cache_used": request.use_cache,
-                "generation_method": "optimized_ml" if recommendations else "fallback"
-            }
-        )
+        # Convert to API response format using proper Pydantic models
+        from api.schemas import QuestionRecommendation
 
-        # Convert to API response format - handle both dict and object recommendations
         formatted_recommendations = []
-        for r in response_data.recommendations:
-            if hasattr(r, '__dict__'):
-                # It's a Recommendation model object, convert to dict with proper field mapping
-                rec_dict = {
-                    'question_id': r.question_id,
-                    'internal_question_id': r.internal_question_id,
-                    'paper_id': r.paper_id,
-                    'score': r.weighted_score,  # Map weighted_score to score for API consistency
-                    'primary_cluster': r.dominant_cluster,
-                    'cluster_strength': r.similarity_score,
-                    'reasoning': r.reasoning,
-                    'combined_score': r.combined_score
-                }
-                formatted_recommendations.append(rec_dict)
-            elif isinstance(r, dict):
-                # It's already a dict, ensure proper field mapping
-                formatted_recommendations.append(r)
-            else:
-                # Handle string representations from cache
+        if recommendations:
+            for r in recommendations:
                 try:
-                    # Try to parse if it's a string representation
-                    if isinstance(r, str) and r.startswith('Recommendation('):
-                        # This is a string representation, skip for now and use fallback
-                        continue
+                    if hasattr(r, '__dict__'):
+                        # It's a Recommendation model object, convert to QuestionRecommendation
+                        rec = QuestionRecommendation(
+                            question_id=r.question_id,
+                            internal_question_id=r.internal_question_id,
+                            paper_id=r.paper_id,
+                            paper_name=getattr(r, 'paper_name', None),
+                            paper_code=getattr(r, 'paper_code', None),
+                            weighted_score=r.weighted_score,
+                            dominant_cluster=r.dominant_cluster,
+                            similarity_score=r.similarity_score,
+                            combined_score=r.combined_score,
+                            reasoning=r.reasoning
+                        )
+                        formatted_recommendations.append(rec)
+                    elif isinstance(r, dict):
+                        # It's already a dict, convert to QuestionRecommendation
+                        rec = QuestionRecommendation(
+                            question_id=r.get('question_id', ''),
+                            internal_question_id=r.get('internal_question_id', 0),
+                            paper_id=r.get('paper_id', 0),
+                            paper_name=r.get('paper_name'),
+                            paper_code=r.get('paper_code'),
+                            weighted_score=r.get('weighted_score', 0.0),
+                            dominant_cluster=r.get('dominant_cluster', 0),
+                            similarity_score=r.get('similarity_score'),
+                            combined_score=r.get('combined_score'),
+                            reasoning=r.get('reasoning')
+                        )
+                        formatted_recommendations.append(rec)
                     else:
-                        formatted_recommendations.append(r if isinstance(r, dict) else {'raw': str(r)})
-                except Exception:
-                    formatted_recommendations.append({'raw': str(r)})
+                        # Skip invalid recommendations
+                        continue
+                except Exception as e:
+                    print(f"Warning: Could not format recommendation {r}: {e}")
+                    continue
 
         return RecommendationResponse(
-            student_id=response_data.student_id,
-            objective=response_data.objective,
+            student_id=request.student_id,
+            objective=request.objective,
             recommendations=formatted_recommendations,
-            generated_at=response_data.generated_at,
-            cache_hit=response_data.cache_hit,
-            response_time_ms=response_data.response_time_ms
+            generated_at=time.time(),
+            cache_hit=cache_hit,
+            response_time_ms=response_time_ms
         )
 
     except HTTPException:
@@ -431,7 +410,10 @@ async def get_question_details(
             raise HTTPException(status_code=400, detail="Question ID cannot be empty")
 
         # Basic format validation for question_id - accept integers or Cambridge format strings
-        if not (question_id.isdigit() or question_id.startswith('9702_')):
+        try:
+            # Use centralized validation through resolve_question_id
+            resolve_question_id(question_id)
+        except Exception:
             raise HTTPException(status_code=400, detail="Invalid question ID format: must be integer or Cambridge format (9702_...)")
         # Use the Question Rendering Service to get the question with proper Question model
         from services.question_service import QuestionService
@@ -473,20 +455,22 @@ async def get_similar_questions(
     """Find similar questions using vector similarity"""
     try:
         # Get question embeddings first - support both question ID formats
-        if question_id.isdigit():
+        query_field, query_value = resolve_question_id(question_id)
+
+        if query_field == "q.internal_question_id":
             # Search by internal_question_id
             question_data = await system.db_manager.execute_query_one_async("""
                 SELECT openai_embedding, umap_embedding, soft_cluster
                 FROM questions
                 WHERE internal_question_id = $1
-            """, (int(question_id),))
+            """, (query_value,))
         else:
             # Search by question_id string
             question_data = await system.db_manager.execute_query_one_async("""
                 SELECT openai_embedding, umap_embedding, soft_cluster
                 FROM questions
                 WHERE question_id = $1
-            """, (question_id,))
+            """, (query_value,))
 
         if not question_data:
             raise HTTPException(status_code=404, detail="Question not found")

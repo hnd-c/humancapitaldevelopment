@@ -21,7 +21,7 @@ class DatabaseManager:
             redis_dict = redis_config
 
         self.redis_client = redis.Redis(**redis_dict)
-        self.RealDictCursor = RealDictCursor  # Make RealDictCursor accessible
+        # RealDictCursor should be imported directly in each service file for consistency
 
         # Initialize connection pools
         self._init_connection_pools()

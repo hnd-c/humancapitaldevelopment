@@ -11,7 +11,8 @@ This service handles:
 
 import json
 from typing import List, Dict, Any, Optional
-from data.models import Question, ModelValidator, ValidationError, convert_db_row_to_question
+from data.models import Question, ModelValidator, ValidationError, convert_db_row_to_question, build_question_query
+from psycopg2.extras import RealDictCursor
 
 
 class QuestionService:
@@ -24,12 +25,10 @@ class QuestionService:
         """Get question data from database by question_id (string) or internal_question_id (integer)"""
         try:
             with self.db_manager.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-                # Support both question_id (string) and internal_question_id (integer)
-                if question_id.isdigit():
-                    # Search by internal_question_id
-                    query = """
+                # Use centralized question ID resolution
+                base_query = """
                     SELECT
                         q.internal_question_id,
                         q.question_id,
@@ -48,34 +47,10 @@ class QuestionService:
                         p.paper_code
                     FROM questions q
                     JOIN papers p ON q.paper_id = p.paper_id
-                    WHERE q.internal_question_id = %s
-                    """
-                    cursor.execute(query, (int(question_id),))
-                else:
-                    # Search by question_id string
-                    query = """
-                    SELECT
-                        q.internal_question_id,
-                        q.question_id,
-                        q.paper_id,
-                        q.question_number,
-                        q.combined_text AS question_text,
-                        q.images,
-                        q.text_length,
-                        q.soft_cluster,
-                        q.openai_embedding,
-                        q.umap_embedding,
-                        q.embedding_model,
-                        q.created_at,
-                        q.updated_at,
-                        p.paper_name,
-                        p.paper_code
-                    FROM questions q
-                    JOIN papers p ON q.paper_id = p.paper_id
-                    WHERE q.question_id = %s
-                    """
-                    cursor.execute(query, (question_id,))
-
+                    {where_clause}
+                """
+                query, params = build_question_query(base_query, question_id)
+                cursor.execute(query, params)
                 result = cursor.fetchone()
 
                 if result:
@@ -96,7 +71,7 @@ class QuestionService:
         """Get random questions from database and return as Question models"""
         try:
             with self.db_manager.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 query = """
                 SELECT
@@ -172,7 +147,7 @@ class QuestionService:
         """Get questions by paper code"""
         try:
             with self.db_manager.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 query = """
                 SELECT
@@ -225,7 +200,7 @@ class QuestionService:
         """Search questions by text content"""
         try:
             with self.db_manager.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 search_query = """
                 SELECT
@@ -260,7 +235,7 @@ class QuestionService:
         """Get list of available papers with question counts"""
         try:
             with self.db_manager.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 query = """
                 SELECT

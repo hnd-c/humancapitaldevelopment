@@ -9,7 +9,7 @@ This module handles:
 """
 
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 
 
@@ -120,27 +120,8 @@ class CacheKey:
         return f"{self.key_type}:{self.entity_id}"
 
 
-@dataclass
-class RecommendationRequest:
-    """Recommendation request schema"""
-    student_id: str
-    objective: str = "balanced"
-    top_k: int = 5
-    use_cache: bool = True
-    similarity_threshold: float = 0.7
-    diversity_filter: bool = True
-
-
-@dataclass
-class RecommendationResponse:
-    """Recommendation response schema"""
-    student_id: str
-    objective: str
-    recommendations: List[Recommendation]
-    generated_at: float
-    cache_hit: bool = False
-    response_time_ms: float = 0.0
-    metadata: Optional[Dict[str, Any]] = None
+# RecommendationRequest and RecommendationResponse have been moved to api/schemas.py
+# to eliminate duplication and use Pydantic models throughout
 
 
 class ValidationError(Exception):
@@ -177,18 +158,11 @@ class ModelValidator:
         return True
 
     @staticmethod
-    def validate_recommendation_request(request: RecommendationRequest) -> bool:
-        """Validate recommendation request"""
-        valid_objectives = ['balanced', 'coverage', 'efficiency', 'success_rate']
-        if request.objective not in valid_objectives:
-            raise ValidationError(f"Objective must be one of: {valid_objectives}")
-
-        if request.top_k <= 0 or request.top_k > 50:
-            raise ValidationError("top_k must be between 1 and 50")
-
-        if not (0 <= request.similarity_threshold <= 1):
-            raise ValidationError("Similarity threshold must be between 0 and 1")
-
+    def validate_recommendation_request(request) -> bool:
+        """Validate recommendation request - works with Pydantic models from api.schemas"""
+        # Pydantic models handle most validation automatically
+        # This method kept for backwards compatibility but most validation
+        # is now handled by Pydantic validators in api/schemas.py
         return True
 
 
@@ -225,3 +199,65 @@ def convert_db_row_to_recommendation(row: Dict[str, Any]) -> Recommendation:
         combined_score=row.get('combined_score'),
         reasoning=row.get('reasoning')
     )
+
+
+# Centralized utility functions to eliminate code duplication
+def resolve_question_id(question_id: str) -> Tuple[str, str]:
+    """
+    Centralized question ID resolution logic.
+
+    Args:
+        question_id: Either internal_question_id (numeric) or question_id (string)
+
+    Returns:
+        Tuple of (query_field, query_value) for database queries
+    """
+    if question_id.isdigit():
+        return ("q.internal_question_id", int(question_id))
+    else:
+        return ("q.question_id", question_id)
+
+
+def extract_student_number(student_id: str) -> int:
+    """
+    Centralized student ID extraction logic.
+    Extract numeric student ID from various string formats.
+
+    Args:
+        student_id: Student ID in various formats (int, string, "STU_001", etc.)
+
+    Returns:
+        Numeric student ID
+    """
+    try:
+        if isinstance(student_id, int):
+            return student_id
+        elif isinstance(student_id, str):
+            if student_id.isdigit():
+                return int(student_id)
+            # Handle formats like "STU_001" or "student_1" or "INST1_MATH_Y2_A_ALG_P1_STU_001"
+            import re
+            match = re.search(r'(\d+)', student_id)
+            if match:
+                return int(match.group(1))
+        return int(student_id)  # Last resort conversion
+    except (ValueError, TypeError):
+        print(f"Warning: Could not extract student number from {student_id}, using 1")
+        return 1
+
+
+def build_question_query(base_query: str, question_id: str) -> Tuple[str, tuple]:
+    """
+    Build database query with proper question ID handling.
+
+    Args:
+        base_query: SQL query with {where_clause} placeholder
+        question_id: Question identifier
+
+    Returns:
+        Tuple of (complete_query, params)
+    """
+    query_field, query_value = resolve_question_id(question_id)
+    where_clause = f"WHERE {query_field} = %s"
+    complete_query = base_query.format(where_clause=where_clause)
+    return complete_query, (query_value,)

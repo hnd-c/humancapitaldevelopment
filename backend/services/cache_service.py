@@ -14,6 +14,7 @@ import time
 import hashlib
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+from psycopg2.extras import RealDictCursor
 
 
 class CacheService:
@@ -636,7 +637,7 @@ class CacheService:
         """Get list of active students for intelligent cache warming"""
         try:
             with self.db_manager.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db_manager.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 # Get students with recent activity (last 24-48 hours)
                 query = """

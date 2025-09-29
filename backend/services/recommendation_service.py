@@ -127,7 +127,7 @@ class OptimizedRecommendationEngine:
 
         try:
             with self.db.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 # Query to get questions with all their embeddings and metadata
                 query = """
@@ -244,7 +244,7 @@ class OptimizedRecommendationEngine:
         """Load transition matrix from PostgreSQL database"""
         try:
             with self.db.get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.db.RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 # Get the most recent active transition matrix
                 cursor.execute("""
@@ -375,7 +375,8 @@ class OptimizedRecommendationEngine:
 
     def recommend_questions_optimized(self, student_id, objective='balanced', top_k=5, use_cache=True):
         """Database-optimized recommendations with proper model integration and caching"""
-        from data.models import RecommendationRequest, ModelValidator
+        from api.schemas import RecommendationRequest
+        from data.models import ModelValidator
 
         # Validate request using data model
         request = RecommendationRequest(

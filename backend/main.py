@@ -13,6 +13,7 @@ import os
 import sys
 import time
 import argparse
+from psycopg2.extras import RealDictCursor
 from pathlib import Path
 
 # Add current directory to Python path
@@ -205,7 +206,7 @@ class HumanCapitalDevelopmentSystem:
         """Get default recommendations when ML engine is unavailable"""
         try:
             with self.components['db_manager'].get_db_connection() as conn:
-                cursor = conn.cursor(cursor_factory=self.components['db_manager'].RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
                 query = """
                 SELECT q.internal_question_id, q.question_id, q.paper_id,

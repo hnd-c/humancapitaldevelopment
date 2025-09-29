@@ -9,6 +9,7 @@ import uuid
 import json
 from typing import Dict, Any, Optional
 from data.database_manager import DatabaseManager
+from data.models import build_question_query, resolve_question_id
 from services.cache_service import CacheService
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
@@ -356,30 +357,18 @@ class StudentInteractionService:
             with self.db_manager.get_db_connection() as conn:
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-                # Support both question_id (string) and internal_question_id (integer)
-                if question_id.isdigit():
-                    # Search by internal_question_id
-                    cursor.execute("""
-                        SELECT q.internal_question_id, q.question_id, q.paper_id, q.question_number,
-                               q.images, q.text_length, q.source_file, q.ms,
-                               q.is_active, q.created_at, q.updated_at,
-                               p.paper_name, p.paper_code
-                        FROM questions q
-                        JOIN papers p ON q.paper_id = p.paper_id
-                        WHERE q.internal_question_id = %s
-                    """, (int(question_id),))
-                else:
-                    # Search by question_id string
-                    cursor.execute("""
-                        SELECT q.internal_question_id, q.question_id, q.paper_id, q.question_number,
-                               q.images, q.text_length, q.source_file, q.ms,
-                               q.is_active, q.created_at, q.updated_at,
-                               p.paper_name, p.paper_code
-                        FROM questions q
-                        JOIN papers p ON q.paper_id = p.paper_id
-                        WHERE q.question_id = %s
-                    """, (question_id,))
-
+                # Use centralized question ID resolution
+                base_query = """
+                    SELECT q.internal_question_id, q.question_id, q.paper_id, q.question_number,
+                           q.images, q.text_length, q.source_file, q.ms,
+                           q.is_active, q.created_at, q.updated_at,
+                           p.paper_name, p.paper_code
+                    FROM questions q
+                    JOIN papers p ON q.paper_id = p.paper_id
+                    {where_clause}
+                """
+                query, params = build_question_query(base_query, question_id)
+                cursor.execute(query, params)
                 result = cursor.fetchone()
                 return dict(result) if result else None
         except Exception as e:
@@ -412,19 +401,20 @@ class StudentInteractionService:
 
     def _get_internal_question_id(self, question_id: str) -> int:
         """Get internal question ID from question_id - supports both integer and Cambridge format"""
-        with self.db_manager.get_db_connection() as conn:
-            cursor = conn.cursor()
+        # Use centralized question ID resolution
+        query_field, query_value = resolve_question_id(question_id)
 
-            # Support both question_id (string) and internal_question_id (integer)
-            if question_id.isdigit():
-                # If it's already an integer, return it
-                return int(question_id)
-            else:
-                # Search by Cambridge format question_id
+        if query_field == "q.internal_question_id":
+            # Already an integer, return it directly
+            return query_value
+        else:
+            # Need to look up the internal_question_id
+            with self.db_manager.get_db_connection() as conn:
+                cursor = conn.cursor()
                 cursor.execute("""
                     SELECT internal_question_id FROM questions
                     WHERE question_id = %s
-                """, (question_id,))
+                """, (query_value,))
                 result = cursor.fetchone()
                 if not result:
                     raise ValueError(f"Question {question_id} not found")
