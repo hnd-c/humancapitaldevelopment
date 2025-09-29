@@ -206,10 +206,9 @@ class StudentInteractionService:
             status = 'correct' if is_correct else 'wrong'
             is_skipped = False
 
-            # Store in existing student_question_history table
-            with self.db_manager.get_db_connection() as conn:
-                cursor = conn.cursor()
-
+            # Store in existing student_question_history table using async
+            conn = await self.db_manager.get_async_connection()
+            try:
                 # Enhanced metadata for logging/debugging
                 enhanced_metadata = {
                     'submission_method': submission_method,
@@ -226,18 +225,27 @@ class StudentInteractionService:
                 (enrollment_id, internal_question_id, attempt_number, status,
                  is_correct, is_skipped, time_spent_sec, timestamp,
                  confidence_level, device_type)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 RETURNING history_id
                 """
 
-                cursor.execute(insert_query, (
+                # Ensure confidence_level meets database constraints (must be between 1 and 5)
+                if confidence_level is None:
+                    safe_confidence_level = 3  # Default to medium confidence
+                else:
+                    # Convert float confidence (0.0-1.0) to integer scale (1-5)
+                    if 0 <= confidence_level <= 1:
+                        safe_confidence_level = max(1, min(5, int(confidence_level * 4) + 1))
+                    else:
+                        safe_confidence_level = max(1, min(5, int(confidence_level)))
+
+                history_id = await conn.fetchval(insert_query,
                     enrollment_id, internal_question_id, attempt_number, status,
                     is_correct, is_skipped, time_spent_seconds, submitted_at,
-                    confidence_level, metadata.get('device_type', 'desktop')
-                ))
-
-                history_id = cursor.fetchone()[0]
-                conn.commit()
+                    safe_confidence_level, metadata.get('device_type', 'desktop')
+                )
+            finally:
+                await self.db_manager.release_async_connection(conn)
 
             # Invalidate student cache since history changed
             self.cache_service.invalidate_student_cache(student_id)

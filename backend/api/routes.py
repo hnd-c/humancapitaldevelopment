@@ -6,7 +6,6 @@ Provides REST API endpoints for the ML-powered recommendation system
 
 import os
 import time
-import json
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 
@@ -359,7 +358,8 @@ async def get_student_history(
         # Extract numeric student ID
         numeric_id = system._extract_student_number(student_id)
 
-        history = system.db_manager.get_student_history_optimized(
+        # Use async database operation
+        history = await system.db_manager.get_student_history_optimized_async(
             student_id=numeric_id,
             limit=limit
         )
@@ -472,72 +472,61 @@ async def get_similar_questions(
 ):
     """Find similar questions using vector similarity"""
     try:
-        with system.db_manager.get_db_connection() as conn:
-            cursor = conn.cursor(cursor_factory=system.db_manager.RealDictCursor)
+        # Get question embeddings first - support both question ID formats
+        if question_id.isdigit():
+            # Search by internal_question_id
+            question_data = await system.db_manager.execute_query_one_async("""
+                SELECT openai_embedding, umap_embedding, soft_cluster
+                FROM questions
+                WHERE internal_question_id = $1
+            """, (int(question_id),))
+        else:
+            # Search by question_id string
+            question_data = await system.db_manager.execute_query_one_async("""
+                SELECT openai_embedding, umap_embedding, soft_cluster
+                FROM questions
+                WHERE question_id = $1
+            """, (question_id,))
 
-            # Get question embeddings first - support both question ID formats
-            if question_id.isdigit():
-                # Search by internal_question_id
-                cursor.execute("""
-                    SELECT openai_embedding, umap_embedding, soft_cluster
-                    FROM questions
-                    WHERE internal_question_id = %s
-                """, (int(question_id),))
-            else:
-                # Search by question_id string
-                cursor.execute("""
-                    SELECT openai_embedding, umap_embedding, soft_cluster
-                    FROM questions
-                    WHERE question_id = %s
-                """, (question_id,))
+        if not question_data:
+            raise HTTPException(status_code=404, detail="Question not found")
 
-            question_data = cursor.fetchone()
-            if not question_data:
-                raise HTTPException(status_code=404, detail="Question not found")
-
-            # Use a simpler similarity search for now (avoiding complex multimodal function)
-            if question_data['openai_embedding']:
-                cursor.execute("""
-                    SELECT q.internal_question_id, q.question_id,
-                           1 - (q.openai_embedding <=> %s::vector(3072)) as similarity_score
-                    FROM questions q
-                    WHERE q.openai_embedding IS NOT NULL
-                      AND 1 - (q.openai_embedding <=> %s::vector(3072)) >= %s
-                      AND q.question_id != %s
-                    ORDER BY q.openai_embedding <=> %s::vector(3072)
-                    LIMIT %s
-                """, (
-                    question_data['openai_embedding'],
-                    question_data['openai_embedding'],
-                    similarity_threshold,
-                    question_id,
-                    question_data['openai_embedding'],
-                    top_k
-                ))
-            elif question_data['soft_cluster']:
-                cursor.execute("""
-                    SELECT q.internal_question_id, q.question_id,
-                           1 - (q.soft_cluster <=> %s::vector(20)) as similarity_score
-                    FROM questions q
-                    WHERE q.soft_cluster IS NOT NULL
-                      AND 1 - (q.soft_cluster <=> %s::vector(20)) >= %s
-                      AND q.question_id != %s
-                    ORDER BY q.soft_cluster <=> %s::vector(20)
-                    LIMIT %s
-                """, (
-                    question_data['soft_cluster'],
-                    question_data['soft_cluster'],
-                    similarity_threshold,
-                    question_id,
-                    question_data['soft_cluster'],
-                    top_k
-                ))
-            else:
-                # No embeddings available, return empty results
-                similar_questions = []
-
-            if 'similar_questions' not in locals():
-                similar_questions = [dict(row) for row in cursor.fetchall()]
+        # Use async vector similarity search
+        if question_data['openai_embedding']:
+            similar_questions = await system.db_manager.execute_query_async("""
+                SELECT q.internal_question_id, q.question_id,
+                       1 - (q.openai_embedding <-> $1) as similarity_score
+                FROM questions q
+                WHERE q.openai_embedding IS NOT NULL
+                  AND 1 - (q.openai_embedding <-> $1) >= $2
+                  AND q.question_id != $3
+                ORDER BY q.openai_embedding <-> $1
+                LIMIT $4
+            """, (
+                question_data['openai_embedding'],
+                similarity_threshold,
+                question_id,
+                top_k
+            ))
+        elif question_data['soft_cluster']:
+            similar_questions = await system.db_manager.execute_query_async("""
+                SELECT q.internal_question_id, q.question_id,
+                       1 - (q.soft_cluster <-> $1) as similarity_score
+                FROM questions q
+                WHERE q.soft_cluster IS NOT NULL
+                  AND 1 - (q.soft_cluster <-> $1) >= $2
+                  AND q.question_id != $3
+                ORDER BY q.soft_cluster <-> $1
+                LIMIT $4
+            """, (
+                question_data['soft_cluster'],
+                similarity_threshold,
+                question_id,
+                top_k
+            ))
+        else:
+            # No embeddings available, return empty results
+            similar_questions = []
 
         return {
             "question_id": question_id,
@@ -566,32 +555,30 @@ async def get_system_analytics(
         if system.performance_monitor:
             analytics['performance'] = system.performance_monitor.get_system_metrics()
 
-        # Database statistics
-        with system.db_manager.get_db_connection() as conn:
-            cursor = conn.cursor()
+        # Database statistics using async operations
 
-            # Question statistics
-            cursor.execute("SELECT COUNT(*) FROM questions")
-            analytics['total_questions'] = cursor.fetchone()[0]
+        # Question statistics
+        result = await system.db_manager.execute_query_one_async("SELECT COUNT(*) as count FROM questions")
+        analytics['total_questions'] = result['count'] if result else 0
 
-            cursor.execute("SELECT COUNT(*) FROM students")
-            analytics['total_students'] = cursor.fetchone()[0]
+        result = await system.db_manager.execute_query_one_async("SELECT COUNT(*) as count FROM students")
+        analytics['total_students'] = result['count'] if result else 0
 
-            cursor.execute("SELECT COUNT(*) FROM student_question_history")
-            analytics['total_attempts'] = cursor.fetchone()[0]
+        result = await system.db_manager.execute_query_one_async("SELECT COUNT(*) as count FROM student_question_history")
+        analytics['total_attempts'] = result['count'] if result else 0
 
-            # Recent activity
-            cursor.execute("""
-                SELECT DATE(timestamp) as date, COUNT(*) as attempts
-                FROM student_question_history
-                WHERE timestamp >= CURRENT_DATE - INTERVAL '7 days'
-                GROUP BY DATE(timestamp)
-                ORDER BY date DESC
-            """)
-            analytics['recent_activity'] = [
-                {"date": row[0].isoformat(), "attempts": row[1]}
-                for row in cursor.fetchall()
-            ]
+        # Recent activity
+        recent_activity_results = await system.db_manager.execute_query_async("""
+            SELECT DATE(timestamp) as date, COUNT(*) as attempts
+            FROM student_question_history
+            WHERE timestamp >= CURRENT_DATE - INTERVAL '7 days'
+            GROUP BY DATE(timestamp)
+            ORDER BY date DESC
+        """)
+        analytics['recent_activity'] = [
+            {"date": row['date'].isoformat(), "attempts": row['attempts']}
+            for row in recent_activity_results
+        ]
 
         return analytics
 

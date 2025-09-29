@@ -94,9 +94,13 @@ class SystemInitializer:
 
     def shutdown(self):
         """Graceful system shutdown"""
-        print("🛑 Shutting down Human Capital Development System...")
+        print("🛑 Shutting down system components...")
 
         try:
+            # Close database pools
+            if hasattr(self, 'db_manager') and self.db_manager:
+                self.db_manager.close_pools()
+
             # Close Redis connections
             if hasattr(self, 'db_manager') and self.db_manager.redis_client:
                 self.db_manager.redis_client.close()
