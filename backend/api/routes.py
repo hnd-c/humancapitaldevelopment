@@ -593,6 +593,18 @@ async def start_learning_session(
             target_questions=request.target_questions or 10
         )
 
+        # Simple, efficient conversion for API response
+        if 'recommendations' in session_data and session_data['recommendations']:
+            from dataclasses import asdict, is_dataclass
+            converted_recs = []
+            for rec in session_data['recommendations']:
+                if is_dataclass(rec):
+                    converted_recs.append(asdict(rec))
+                else:
+                    # Fallback to __dict__ if not a dataclass
+                    converted_recs.append(dict(rec.__dict__))
+            session_data['recommendations'] = converted_recs
+
         return StudentSessionResponse(**session_data)
 
     except Exception as e:
@@ -693,13 +705,13 @@ async def get_student_sessions(
     try:
         sessions = []
 
-        # Get session data from Redis cache
+        # Get session data from Redis cache with optimized deserialization
         cache_keys = system.cache_manager.redis.keys("session:*")
         for key in cache_keys:
             session_data = system.cache_manager.redis.get(key)
             if session_data:
-                import json
-                session = json.loads(session_data)
+                from data.serialization import deserialize_from_cache
+                session = deserialize_from_cache(session_data)
                 if str(session.get('student_id')) == str(student_id):
                     sessions.append({
                         'session_id': session.get('session_id'),

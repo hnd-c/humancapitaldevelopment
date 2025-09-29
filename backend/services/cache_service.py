@@ -3,43 +3,57 @@
 Cache Service - Advanced caching strategies and cache management
 
 This module handles:
-- Intelligent caching strategies
+- Intelligent caching strategies with optimized serialization
 - Cache invalidation patterns
 - Cache warming and precomputation
 - Cache analytics and monitoring
+- Efficient serialization with automatic compression
 """
 
-import json
 import time
-import hashlib
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Type, TypeVar
 from datetime import datetime
 from psycopg2.extras import RealDictCursor
-from data.models import create_service_logger, handle_cache_error
+from data.models import create_service_logger, handle_cache_error, Recommendation
+from data.serialization import (
+    CacheSerializer, SerializationMethod, create_cache_key,
+    serialize_for_cache, deserialize_from_cache
+)
+
+T = TypeVar('T')
 
 
 class CacheService:
-    """Advanced caching service with intelligent strategies"""
+    """Advanced caching service with intelligent strategies and optimized serialization"""
 
     def __init__(self, redis_client, db_manager):
         self.redis = redis_client
         self.db_manager = db_manager
         self.logger = create_service_logger('CacheService')
+        self.serializer = CacheSerializer(SerializationMethod.JSON_COMPRESSED)
         self.cache_stats = {
             'hits': 0,
             'misses': 0,
             'sets': 0,
-            'deletes': 0
+            'deletes': 0,
+            'serialization_time': 0,
+            'deserialization_time': 0,
+            'compression_ratio': []
         }
 
-    def get_cached_recommendations(self, student_id: str, objective: str) -> Optional[Any]:
-        """Get cached recommendations for a student and objective"""
+    def get_cached_recommendations(self, student_id: str, objective: str) -> Optional[List[Recommendation]]:
+        """Get cached recommendations for a student and objective with optimized deserialization"""
         try:
+            # Use simple key format for consistency
             cache_key = f"recommendations:{student_id}:{objective}"
-            cached_value = self.redis.get(cache_key)
-            if cached_value:
+            cached_data = self.redis.get(cache_key)
+
+            if cached_data:
+                start_time = time.time()
+                recommendations = deserialize_from_cache(cached_data, List[Recommendation])
+                self.cache_stats['deserialization_time'] += time.time() - start_time
                 self.cache_stats['hits'] += 1
-                return json.loads(cached_value)
+                return recommendations
 
             self.cache_stats['misses'] += 1
             return None
@@ -47,94 +61,110 @@ class CacheService:
             handle_cache_error(self.logger, f"get_cached_recommendations for {student_id}/{objective}", e)
             return None
 
-    def cache_recommendations(self, student_id: str, objective: str, recommendations: Any, ttl: int = 1800) -> bool:
-        """Cache recommendations for a student and objective"""
+    def cache_recommendations(self, student_id: str, objective: str, recommendations: List[Recommendation], ttl: int = 1800) -> bool:
+        """Cache recommendations with optimized serialization and compression"""
         try:
+            # Use simple key format for consistency
             cache_key = f"recommendations:{student_id}:{objective}"
 
-            # Convert Recommendation objects to dictionaries before caching
-            recommendations_for_cache = []
-            for rec in recommendations:
-                if hasattr(rec, '__dataclass_fields__'):
-                    # It's a dataclass - convert to dict
-                    import dataclasses
-                    rec_dict = dataclasses.asdict(rec)
-                    recommendations_for_cache.append(rec_dict)
-                elif isinstance(rec, dict):
-                    recommendations_for_cache.append(rec)
-                else:
-                    # Fallback - convert to dict manually
-                    rec_dict = {
-                        'question_id': getattr(rec, 'question_id', 'unknown'),
-                        'internal_question_id': getattr(rec, 'internal_question_id', 0),
-                        'paper_id': getattr(rec, 'paper_id', 0),
-                        'weighted_score': getattr(rec, 'weighted_score', 0.0),
-                        'dominant_cluster': getattr(rec, 'dominant_cluster', 0),
-                        'similarity_score': getattr(rec, 'similarity_score', None),
-                        'combined_score': getattr(rec, 'combined_score', None),
-                        'reasoning': getattr(rec, 'reasoning', None)
-                    }
-                    recommendations_for_cache.append(rec_dict)
+            start_time = time.time()
+            serialized_data = serialize_for_cache(recommendations, compress_large=True)
+            serialization_time = time.time() - start_time
 
-            self.redis.setex(cache_key, ttl, json.dumps(recommendations_for_cache))
+            # Track compression efficiency
+            original_size = len(str(recommendations))
+            compressed_size = len(serialized_data)
+            compression_ratio = compressed_size / original_size if original_size > 0 else 1.0
+
+            self.cache_stats['serialization_time'] += serialization_time
+            self.cache_stats['compression_ratio'].append(compression_ratio)
+
+            # Keep only last 100 compression ratios for memory efficiency
+            if len(self.cache_stats['compression_ratio']) > 100:
+                self.cache_stats['compression_ratio'] = self.cache_stats['compression_ratio'][-100:]
+
+            self.redis.setex(cache_key, ttl, serialized_data)
             self.cache_stats['sets'] += 1
+
+            self.logger.debug(f"Cached recommendations for {student_id}/{objective}: "
+                            f"compression {compression_ratio:.2%}, time {serialization_time:.3f}s")
+
             return True
         except Exception as e:
             return handle_cache_error(self.logger, f"cache_recommendations for {student_id}/{objective}", e)
 
     def get_cached_student_history(self, student_id: str) -> Optional[List[Dict[str, Any]]]:
-        """Get cached student history"""
+        """Get cached student history with optimized deserialization"""
         try:
+            # Use simple key format for consistency
             cache_key = f"student_history:{student_id}"
-            cached_value = self.redis.get(cache_key)
-            if cached_value:
+            cached_data = self.redis.get(cache_key)
+
+            if cached_data:
+                start_time = time.time()
+                history = deserialize_from_cache(cached_data)
+                self.cache_stats['deserialization_time'] += time.time() - start_time
                 self.cache_stats['hits'] += 1
-                return json.loads(cached_value)
+                return history
 
             self.cache_stats['misses'] += 1
             return None
         except Exception as e:
-            print(f"Error getting cached student history: {e}")
+            handle_cache_error(self.logger, f"get_cached_student_history for {student_id}", e)
             return None
 
     def cache_student_history(self, student_id: str, history: List[Dict[str, Any]], ttl: int = 3600) -> bool:
-        """Cache student history for 1 hour"""
+        """Cache student history with optimized serialization"""
         try:
+            # Use simple key format for consistency
             cache_key = f"student_history:{student_id}"
-            self.redis.setex(cache_key, ttl, json.dumps(history, default=str))
+
+            start_time = time.time()
+            serialized_data = serialize_for_cache(history, compress_large=True)
+            self.cache_stats['serialization_time'] += time.time() - start_time
+
+            self.redis.setex(cache_key, ttl, serialized_data)
             self.cache_stats['sets'] += 1
             return True
         except Exception as e:
-            print(f"Error caching student history: {e}")
+            handle_cache_error(self.logger, f"cache_student_history for {student_id}", e)
             return False
 
     def get_cached_enriched_vector(self, student_id: str, objective: str) -> Optional[Any]:
-        """Get cached enriched vector for a student and objective"""
+        """Get cached enriched vector with optimized numpy array handling"""
         try:
+            # Use simple key format for consistency
             cache_key = f"enriched_vector:{student_id}:{objective}"
-            cached_value = self.redis.get(cache_key)
-            if cached_value:
+            cached_data = self.redis.get(cache_key)
+
+            if cached_data:
+                start_time = time.time()
+                vector = deserialize_from_cache(cached_data)
+                self.cache_stats['deserialization_time'] += time.time() - start_time
                 self.cache_stats['hits'] += 1
-                import numpy as np
-                return np.array(json.loads(cached_value))
+                return vector
 
             self.cache_stats['misses'] += 1
             return None
         except Exception as e:
-            print(f"Error getting cached enriched vector: {e}")
+            handle_cache_error(self.logger, f"get_cached_enriched_vector for {student_id}/{objective}", e)
             return None
 
     def cache_enriched_vector(self, student_id: str, objective: str, vector: Any, ttl: int = 1800) -> bool:
-        """Cache enriched vector for 30 minutes"""
+        """Cache enriched vector with optimized numpy array serialization"""
         try:
+            # Use simple key format for consistency
             cache_key = f"enriched_vector:{student_id}:{objective}"
-            # Convert numpy array to list for JSON serialization
-            vector_list = vector.tolist() if hasattr(vector, 'tolist') else vector
-            self.redis.setex(cache_key, ttl, json.dumps(vector_list))
+
+            start_time = time.time()
+            serialized_data = serialize_for_cache(vector, compress_large=True)
+            self.cache_stats['serialization_time'] += time.time() - start_time
+
+            self.redis.setex(cache_key, ttl, serialized_data)
             self.cache_stats['sets'] += 1
             return True
         except Exception as e:
-            print(f"Error caching enriched vector: {e}")
+            handle_cache_error(self.logger, f"cache_enriched_vector for {student_id}/{objective}", e)
             return False
 
     def invalidate_student_cache(self, student_id: str) -> bool:
@@ -218,14 +248,18 @@ class CacheService:
             print(f"Error checking cache validity: {e}")
             return False
 
-    def get_or_compute(self, cache_key: str, compute_function, ttl: int = 3600, *args, **kwargs) -> Any:
-        """Get from cache or compute and cache the result"""
+    def get_or_compute(self, cache_key: str, compute_function, ttl: int = 3600,
+                      target_type: Optional[Type[T]] = None, *args, **kwargs) -> T:
+        """Get from cache or compute and cache the result with optimized serialization"""
         try:
             # Try to get from cache
-            cached_value = self.redis.get(cache_key)
-            if cached_value:
+            cached_data = self.redis.get(cache_key)
+            if cached_data:
+                start_time = time.time()
+                result = deserialize_from_cache(cached_data, target_type)
+                self.cache_stats['deserialization_time'] += time.time() - start_time
                 self.cache_stats['hits'] += 1
-                return json.loads(cached_value)
+                return result
 
             # Cache miss - compute value
             self.cache_stats['misses'] += 1
@@ -233,13 +267,17 @@ class CacheService:
 
             # Cache the computed value
             if computed_value is not None:
-                self.redis.setex(cache_key, ttl, json.dumps(computed_value, default=str))
+                start_time = time.time()
+                serialized_data = serialize_for_cache(computed_value, compress_large=True)
+                self.cache_stats['serialization_time'] += time.time() - start_time
+
+                self.redis.setex(cache_key, ttl, serialized_data)
                 self.cache_stats['sets'] += 1
 
             return computed_value
 
         except Exception as e:
-            print(f"Error in get_or_compute for key {cache_key}: {e}")
+            handle_cache_error(self.logger, f"get_or_compute for key {cache_key}", e)
             # Fallback to computing without caching
             return compute_function(*args, **kwargs)
 
@@ -335,9 +373,10 @@ class CacheService:
                             top_k=20
                         )
 
-                        # Cache the results
+                        # Cache the results with optimized serialization
                         cache_key = f"similarities:{question_id}"
-                        self.redis.setex(cache_key, 3600, json.dumps(similar_questions, default=str))  # 1 hour
+                        serialized_data = serialize_for_cache(similar_questions, compress_large=True)
+                        self.redis.setex(cache_key, 3600, serialized_data)  # 1 hour
 
                         computation_stats['similarities_cached'] += 1
                         computation_stats['questions_processed'] += 1
@@ -562,7 +601,7 @@ class CacheService:
                         memory_usage = self.redis.memory_usage(key)
                         if memory_usage:
                             key_types[key_type]['total_memory'] += memory_usage
-                    except:
+                    except Exception:
                         pass  # memory_usage command might not be available
 
                 if cursor == 0:
@@ -608,12 +647,12 @@ class CacheService:
                     memory_usage = self.redis.memory_usage(key)
                     if memory_usage and memory_usage > 10000:  # Larger than 10KB
                         priority_score += 0.2
-                except:
+                except Exception:
                     pass
 
                 key_priorities.append((key, priority_score))
 
-            except Exception as e:
+            except Exception:
                 # If we can't analyze the key, give it medium priority
                 key_priorities.append((key, 0.5))
 
@@ -628,8 +667,10 @@ class CacheService:
 
         if params:
             # Create deterministic hash of parameters
-            param_string = json.dumps(params, sort_keys=True)
-            param_hash = hashlib.md5(param_string.encode()).hexdigest()[:8]
+            # Use optimized serialization for parameter hashing
+            import hashlib
+            param_bytes = serialize_for_cache(params, compress_large=False)
+            param_hash = hashlib.md5(param_bytes).hexdigest()[:8]
             base_key += f":{param_hash}"
 
         return base_key
@@ -677,10 +718,37 @@ class CacheService:
             return ['1', '2', '3', '4', '5']
 
     def get_cache_statistics(self) -> Dict[str, Any]:
-        """Get current cache statistics"""
+        """Get current cache statistics including serialization performance"""
+        stats = self.cache_stats.copy()
+
+        # Calculate averages for better insights
+        if len(stats['compression_ratio']) > 0:
+            stats['avg_compression_ratio'] = sum(stats['compression_ratio']) / len(stats['compression_ratio'])
+            stats['best_compression_ratio'] = min(stats['compression_ratio'])
+        else:
+            stats['avg_compression_ratio'] = 1.0
+            stats['best_compression_ratio'] = 1.0
+
+        # Calculate serialization efficiency
+        total_operations = stats['hits'] + stats['misses']
+        if total_operations > 0:
+            stats['avg_serialization_time'] = stats['serialization_time'] / stats['sets'] if stats['sets'] > 0 else 0
+            stats['avg_deserialization_time'] = stats['deserialization_time'] / stats['hits'] if stats['hits'] > 0 else 0
+
         return {
-            'local_stats': self.cache_stats.copy(),
+            'local_stats': stats,
             'redis_stats': self.redis.info('stats'),
             'memory_info': self.redis.info('memory'),
-            'keyspace_info': self.redis.info('keyspace')
+            'keyspace_info': self.redis.info('keyspace'),
+            'serialization_performance': {
+                'total_serialization_time': stats['serialization_time'],
+                'total_deserialization_time': stats['deserialization_time'],
+                'avg_serialization_time': stats.get('avg_serialization_time', 0),
+                'avg_deserialization_time': stats.get('avg_deserialization_time', 0),
+                'compression_efficiency': {
+                    'avg_ratio': stats['avg_compression_ratio'],
+                    'best_ratio': stats['best_compression_ratio'],
+                    'total_samples': len(stats['compression_ratio'])
+                }
+            }
         }

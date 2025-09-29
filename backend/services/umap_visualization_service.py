@@ -129,7 +129,8 @@ class UMAPVisualizationService:
             try:
                 cached_value = self.cache_service.redis.get(cache_key)
                 if cached_value:
-                    return json.loads(cached_value)
+                    from data.serialization import deserialize_from_cache
+                    return deserialize_from_cache(cached_value)
             except Exception as e:
                 print(f"Cache lookup failed: {e}")
 
@@ -238,7 +239,9 @@ class UMAPVisualizationService:
                 # Cache for 2 minutes (shorter TTL due to dynamic nature)
                 if self.cache_service:
                     try:
-                        self.cache_service.redis.setex(cache_key, 120, json.dumps(result, default=str))
+                        from data.serialization import serialize_for_cache
+                        cached_data = serialize_for_cache(result, compress_large=True)
+                        self.cache_service.redis.setex(cache_key, 120, cached_data)
                     except Exception as e:
                         print(f"Cache set failed: {e}")
 
@@ -276,7 +279,8 @@ class UMAPVisualizationService:
             try:
                 cached_value = self.cache_service.redis.get(cache_key)
                 if cached_value:
-                    return json.loads(cached_value)
+                    from data.serialization import deserialize_from_cache
+                    return deserialize_from_cache(cached_value)
             except Exception as e:
                 print(f"Cache lookup failed: {e}")
 
@@ -374,7 +378,9 @@ class UMAPVisualizationService:
                 # Cache for 5 minutes (longer TTL for static data)
                 if self.cache_service:
                     try:
-                        self.cache_service.redis.setex(cache_key, 300, json.dumps(result, default=str))
+                        from data.serialization import serialize_for_cache
+                        cached_data = serialize_for_cache(result, compress_large=True)
+                        self.cache_service.redis.setex(cache_key, 300, cached_data)
                     except Exception as e:
                         print(f"Cache set failed: {e}")
 
@@ -396,7 +402,8 @@ class UMAPVisualizationService:
             try:
                 cached_value = self.cache_service.redis.get(cache_key)
                 if cached_value:
-                    return json.loads(cached_value)
+                    from data.serialization import deserialize_from_cache
+                    return deserialize_from_cache(cached_value)
             except Exception as e:
                 print(f"Cache lookup failed: {e}")
 
@@ -425,7 +432,9 @@ class UMAPVisualizationService:
                 # Cache for 1 minute
                 if self.cache_service:
                     try:
-                        self.cache_service.redis.setex(cache_key, 60, json.dumps(status_data, default=str))
+                        from data.serialization import serialize_for_cache
+                        cached_data = serialize_for_cache(status_data, compress_large=False)
+                        self.cache_service.redis.setex(cache_key, 60, cached_data)
                     except Exception as e:
                         print(f"Cache set failed: {e}")
 
@@ -443,7 +452,8 @@ class UMAPVisualizationService:
             try:
                 cached_value = self.cache_service.redis.get(cache_key)
                 if cached_value:
-                    cached_bounds = json.loads(cached_value)
+                    from data.serialization import deserialize_from_cache
+                    cached_bounds = deserialize_from_cache(cached_value)
                     return UMAPBounds(**cached_bounds)
             except Exception as e:
                 print(f"Cache lookup failed: {e}")
@@ -475,7 +485,9 @@ class UMAPVisualizationService:
                         "center_y": bounds.center_y
                     }
                     try:
-                        self.cache_service.redis.setex(cache_key, 3600, json.dumps(bounds_dict, default=str))
+                        from data.serialization import serialize_for_cache
+                        cached_data = serialize_for_cache(bounds_dict, compress_large=False)
+                        self.cache_service.redis.setex(cache_key, 3600, cached_data)
                     except Exception as e:
                         print(f"Cache set failed: {e}")
 

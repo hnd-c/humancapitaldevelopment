@@ -32,24 +32,19 @@ class StudentService:
     def get_student_by_id(self, student_id: str) -> Optional[Student]:
         """Get student information by ID, returns Student model"""
         try:
-            # Try cache first
+            # Try cache first with optimized deserialization
             if self.cache_service:
+                from data.serialization import deserialize_from_cache
+
+                # Use simple key format for consistency
                 cache_key = f"student:{student_id}"
                 cached_data = self.cache_service.redis.get(cache_key)
                 if cached_data:
-                    import json
-                    student_dict = json.loads(cached_data)
-                    # Convert back to Student model
-                    return Student(
-                        student_id=student_dict['student_id'],
-                        student_name=student_dict['student_name'],
-                        student_code=student_dict['student_code'],
-                        institution_id=student_dict['institution_id'],
-                        department_id=student_dict['department_id'],
-                        year_id=student_dict['year_id'],
-                        created_at=student_dict.get('created_at'),
-                        updated_at=student_dict.get('updated_at')
-                    )
+                    try:
+                        return deserialize_from_cache(cached_data, Student)
+                    except Exception as e:
+                        self.logger.warning(f"Failed to deserialize cached student {student_id}: {e}")
+                        # Continue to database lookup
 
             # Extract numeric ID if needed
             numeric_id = extract_student_number(student_id)
@@ -87,23 +82,14 @@ class StudentService:
                     except ValidationError as ve:
                         print(f"Student data validation warning: {ve}")
 
-                    # Cache the result as dict for JSON serialization
+                    # Cache the result with optimized serialization
                     if self.cache_service:
-                        import json
+                        from data.serialization import serialize_for_cache
+
+                        # Use simple key format for consistency
                         cache_key = f"student:{student_id}"
-                        student_dict = {
-                            'student_id': student.student_id,
-                            'student_name': student.student_name,
-                            'student_code': student.student_code,
-                            'institution_id': student.institution_id,
-                            'department_id': student.department_id,
-                            'year_id': student.year_id,
-                            'created_at': str(student.created_at) if student.created_at else None,
-                            'updated_at': str(student.updated_at) if student.updated_at else None
-                        }
-                        self.cache_service.redis.setex(
-                            cache_key, 3600, json.dumps(student_dict, default=str)
-                        )
+                        cached_data = serialize_for_cache(student, compress_large=False)
+                        self.cache_service.redis.setex(cache_key, 3600, cached_data)
 
                     return student
 

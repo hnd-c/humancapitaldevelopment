@@ -154,6 +154,7 @@ class StudentSessionResponse(BaseModel):
     estimated_duration_minutes: Optional[int] = None
 
 
+
 class ClusterPerformance(BaseModel):
     """Performance metrics for a topic cluster"""
     cluster_id: int

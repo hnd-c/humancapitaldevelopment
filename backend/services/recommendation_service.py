@@ -113,17 +113,18 @@ class OptimizedRecommendationEngine:
         try:
             cached_data = self.db.redis_client.get(cache_key)
             if cached_data:
-                import json
-                cached_json = json.loads(cached_data)
-                # Reconstruct DataFrame from cached JSON
-                df = pd.DataFrame(cached_json['data'])
+                from data.serialization import deserialize_from_cache
+
+                cache_obj = deserialize_from_cache(cached_data)
+                # Reconstruct DataFrame from cached data
+                df = pd.DataFrame(cache_obj['data'])
 
                 # Convert vector columns back to numpy arrays
                 for col in ['soft_cluster', 'openai_embedding', 'umap_embedding']:
                     if col in df.columns:
                         df[col] = df[col].apply(lambda x: np.array(x, dtype=np.float32) if x is not None else None)
 
-                print(f"✅ Loaded {len(df)} questions from cache (JSON)")
+                print(f"✅ Loaded {len(df)} questions from cache (optimized)")
                 return df
         except Exception as e:
             print(f"⚠️ Cache miss for questions data: {e}")
@@ -192,26 +193,20 @@ class OptimizedRecommendationEngine:
 
                 print(f"✅ Loaded {len(df)} questions from PostgreSQL database")
 
-                # Cache using JSON serialization (more reliable than pickle)
+                # Cache using optimized serialization with compression
                 try:
-                    import json
-                    # Convert DataFrame to JSON-serializable format
+                    from data.serialization import serialize_for_cache
+
                     cache_data = {
                         'data': df.copy().to_dict('records'),
                         'cached_at': time.time(),
                         'count': len(df)
                     }
 
-                    # Convert numpy arrays to lists for JSON serialization
-                    for record in cache_data['data']:
-                        for col in ['soft_cluster', 'openai_embedding', 'umap_embedding']:
-                            if col in record and record[col] is not None:
-                                if hasattr(record[col], 'tolist'):
-                                    record[col] = record[col].tolist()
-
-                    cached_json = json.dumps(cache_data, default=str)
-                    self.db.redis_client.setex(cache_key, 1800, cached_json)  # 30 minutes
-                    print(f"💾 Cached questions dataframe (JSON) for faster startup")
+                    # Serialize with automatic compression for large DataFrames
+                    cached_data = serialize_for_cache(cache_data, compress_large=True)
+                    self.db.redis_client.setex(cache_key, 1800, cached_data)  # 30 minutes
+                    print(f"💾 Cached questions dataframe (optimized) for faster startup")
                 except Exception as e:
                     print(f"⚠️ Could not cache questions data: {e}")
 

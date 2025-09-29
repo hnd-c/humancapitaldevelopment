@@ -64,7 +64,7 @@ class RedisConfig:
     port: int = 6379
     db: int = 0
     password: Optional[str] = None
-    decode_responses: bool = True
+    decode_responses: bool = False  # Must be False for binary cache data (gzip compressed)
     socket_timeout: int = 30
     socket_connect_timeout: int = 30
     max_connections: int = 50

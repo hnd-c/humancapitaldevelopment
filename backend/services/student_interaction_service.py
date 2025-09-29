@@ -38,63 +38,24 @@ class StudentInteractionService:
                 top_k=target_questions
             )
 
-            # Cache session data (no database needed - just Redis)
-            # Convert Recommendation objects to dicts for JSON serialization
-            recommendations_dicts = []
-            for rec in recommendations:
-                try:
-                    # Import dataclasses for conversion
-                    import dataclasses
-
-                                        # Try different ways to convert Recommendation objects to dicts
-                    if hasattr(rec, '__dataclass_fields__'):
-                        # It's a dataclass - use dataclasses.asdict
-                        rec_dict = dataclasses.asdict(rec)
-                        recommendations_dicts.append(rec_dict)
-                    elif hasattr(rec, '__dict__'):
-                        # Regular object with __dict__
-                        rec_dict = {}
-                        for key, value in rec.__dict__.items():
-                            # Handle special types that might not serialize
-                            if isinstance(value, (str, int, float, bool, type(None))):
-                                rec_dict[key] = value
-                            else:
-                                rec_dict[key] = str(value)
-                        recommendations_dicts.append(rec_dict)
-                    elif isinstance(rec, dict):
-                        recommendations_dicts.append(rec)
-                    else:
-                        # Manual field extraction for Recommendation objects
-                        rec_dict = {
-                            'question_id': getattr(rec, 'question_id', 'unknown'),
-                            'internal_question_id': getattr(rec, 'internal_question_id', 0),
-                            'paper_id': getattr(rec, 'paper_id', 0),
-                            'weighted_score': getattr(rec, 'weighted_score', 0.0),
-                            'dominant_cluster': getattr(rec, 'dominant_cluster', 0),
-                            'similarity_score': getattr(rec, 'similarity_score', None),
-                            'combined_score': getattr(rec, 'combined_score', None),
-                            'reasoning': getattr(rec, 'reasoning', None)
-                        }
-                        recommendations_dicts.append(rec_dict)
-                except Exception as e:
-                    # Last resort fallback
-                    print(f"⚠️ Error converting recommendation: {e}")
-                    recommendations_dicts.append({"error": "Conversion failed", "raw": str(rec)})
-
+            # Cache session data - let the serialization system handle dataclass conversion automatically
             session_data = {
                 'session_id': session_id,
                 'student_id': student_id,
                 'objective': objective,
                 'session_type': session_type,
-                'recommendations': recommendations_dicts,
+                'recommendations': recommendations,  # Keep as original dataclass objects
                 'session_started_at': session_start,
                 'estimated_duration_minutes': target_questions * 3  # 3 minutes per question estimate
             }
 
+            from data.serialization import serialize_for_cache
+
+            cached_data = serialize_for_cache(session_data, compress_large=True)
             self.cache_service.redis.setex(
                 f"session:{session_id}",
                 3600,  # 1 hour TTL
-                json.dumps(session_data, default=str)
+                cached_data
             )
 
             print(f"🎓 Started learning session {session_id[:8]}... for student {student_id}")
@@ -127,10 +88,13 @@ class StudentInteractionService:
                 'status': 'in_progress'
             }
 
+            from data.serialization import serialize_for_cache
+
+            cached_data = serialize_for_cache(attempt_data, compress_large=False)
             self.cache_service.redis.setex(
                 f"attempt:{attempt_id}",
                 1800,  # 30 minutes TTL
-                json.dumps(attempt_data, default=str)
+                cached_data
             )
 
             print(f"📝 Started question attempt {attempt_id[:8]}... for student {student_id}")
@@ -288,10 +252,11 @@ class StudentInteractionService:
     def get_student_session_progress(self, session_id: str) -> Dict[str, Any]:
         """Get progress for a learning session"""
         try:
-            # Try cache first
+            # Try cache first with optimized deserialization
             cached_session = self.cache_service.redis.get(f"session:{session_id}")
             if cached_session:
-                session_data = json.loads(cached_session)
+                from data.serialization import deserialize_from_cache
+                session_data = deserialize_from_cache(cached_session)
             else:
                 # Get from database - use student history to reconstruct session
                 with self.db_manager.get_db_connection() as conn:
@@ -378,10 +343,11 @@ class StudentInteractionService:
     def _get_attempt_data(self, attempt_id: str) -> Optional[Dict[str, Any]]:
         """Get attempt data from cache or database"""
         try:
-            # Try cache first
+            # Try cache first with optimized deserialization
             cached_attempt = self.cache_service.redis.get(f"attempt:{attempt_id}")
             if cached_attempt:
-                return json.loads(cached_attempt)
+                from data.serialization import deserialize_from_cache
+                return deserialize_from_cache(cached_attempt)
 
             # Get from database
             with self.db_manager.get_db_connection() as conn:
