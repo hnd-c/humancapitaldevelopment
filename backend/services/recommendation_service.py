@@ -8,6 +8,8 @@ import pandas as pd
 from ml.vector_encoder import RichVectorEncoder, load_student_history_normalized
 import time
 from psycopg2.extras import RealDictCursor
+from api.schemas import RecommendationRequest
+from data.models import ModelValidator, create_service_logger, handle_service_error, handle_database_error
 
 
 class OptimizedRecommendationEngine:
@@ -18,6 +20,7 @@ class OptimizedRecommendationEngine:
         self.db = db_manager
         self.cache_service = cache_service
         self.lazy_load = lazy_load
+        self.logger = create_service_logger('RecommendationEngine')
         self._initialized = False
 
         # Initialize basic attributes regardless of lazy loading
@@ -375,8 +378,6 @@ class OptimizedRecommendationEngine:
 
     def recommend_questions_optimized(self, student_id, objective='balanced', top_k=5, use_cache=True):
         """Database-optimized recommendations with proper model integration and caching"""
-        from api.schemas import RecommendationRequest
-        from data.models import ModelValidator
 
         # Validate request using data model
         request = RecommendationRequest(
@@ -635,7 +636,7 @@ class OptimizedRecommendationEngine:
                     return self._get_simple_fallback_recommendations(attempted_questions, top_k)
 
         except Exception as e:
-            print(f"❌ Error in _find_recommendations_db: {e}")
+            self.logger.error(f"_find_recommendations_db failed: {str(e)}", exc_info=True)
             # Fallback to simple random selection
             return self._get_simple_fallback_recommendations(attempted_questions, top_k)
 

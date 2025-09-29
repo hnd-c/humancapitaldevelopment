@@ -11,7 +11,10 @@ This service handles:
 
 import json
 from typing import List, Dict, Any, Optional
-from data.models import Question, ModelValidator, ValidationError, convert_db_row_to_question, build_question_query
+from data.models import (
+    Question, ModelValidator, ValidationError, convert_db_row_to_question, build_question_query,
+    create_service_logger, handle_service_error, handle_database_error
+)
 from psycopg2.extras import RealDictCursor
 
 
@@ -20,6 +23,7 @@ class QuestionService:
 
     def __init__(self, db_manager):
         self.db_manager = db_manager
+        self.logger = create_service_logger('QuestionService')
 
     def get_question_by_id(self, question_id: str) -> Optional[Question]:
         """Get question data from database by question_id (string) or internal_question_id (integer)"""
@@ -61,11 +65,9 @@ class QuestionService:
                 return None
 
         except ValidationError as e:
-            print(f"Validation error for question {question_id}: {e}")
-            return None
+            return handle_service_error(self.logger, f"validation for question {question_id}", e)
         except Exception as e:
-            print(f"Error fetching question {question_id}: {e}")
-            return None
+            return handle_service_error(self.logger, f"get_question_by_id for {question_id}", e)
 
     def get_random_questions(self, count: int = 10) -> List[Question]:
         """Get random questions from database and return as Question models"""
@@ -114,8 +116,7 @@ class QuestionService:
                 return questions
 
         except Exception as e:
-            print(f"Error fetching random questions: {e}")
-            return []
+            return handle_database_error(self.logger, f"get_random_questions (count={count})", e)
 
     def question_to_summary(self, question: Question) -> Dict[str, Any]:
         """Convert Question model to summary format for API responses"""

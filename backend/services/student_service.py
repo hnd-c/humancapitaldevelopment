@@ -15,7 +15,8 @@ import time
 from data.models import (
     Student, StudentPerformance,
     ModelValidator, ValidationError,
-    extract_student_number
+    extract_student_number,
+    create_service_logger, handle_service_error, handle_database_error
 )
 from psycopg2.extras import RealDictCursor
 
@@ -26,6 +27,7 @@ class StudentService:
     def __init__(self, db_manager, cache_service=None):
         self.db_manager = db_manager
         self.cache_service = cache_service
+        self.logger = create_service_logger('StudentService')
 
     def get_student_by_id(self, student_id: str) -> Optional[Student]:
         """Get student information by ID, returns Student model"""
@@ -50,7 +52,7 @@ class StudentService:
                     )
 
             # Extract numeric ID if needed
-            numeric_id = self._extract_student_number(student_id)
+            numeric_id = extract_student_number(student_id)
 
             with self.db_manager.get_db_connection() as conn:
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -108,8 +110,7 @@ class StudentService:
                 return None
 
         except Exception as e:
-            print(f"Error getting student {student_id}: {e}")
-            return None
+            return handle_service_error(self.logger, f"get_student_by_id for {student_id}", e)
 
     def analyze_student_performance(self, student_id: str) -> Optional[StudentPerformance]:
         """Comprehensive student performance analysis, returns StudentPerformance model"""
@@ -183,8 +184,8 @@ class StudentService:
             return performance
 
         except Exception as e:
-            print(f"Error analyzing student performance: {e}")
-            # Return error performance model
+            self.logger.error(f"analyze_student_performance for {student_id} failed: {str(e)}", exc_info=True)
+            # Return error performance model with proper logging
             return StudentPerformance(
                 student_id=student_id,
                 total_attempts=0,
@@ -221,8 +222,7 @@ class StudentService:
                 return [dict(row) for row in results]
 
         except Exception as e:
-            print(f"Error getting student history for {student_id}: {e}")
-            return []
+            return handle_database_error(self.logger, f"get_student_history for {student_id}", e)
 
 # Removed _extract_student_number - now using centralized extract_student_number from data.models
 

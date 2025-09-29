@@ -11,6 +11,7 @@ This module handles:
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
+import logging
 
 
 @dataclass
@@ -261,3 +262,96 @@ def build_question_query(base_query: str, question_id: str) -> Tuple[str, tuple]
     where_clause = f"WHERE {query_field} = %s"
     complete_query = base_query.format(where_clause=where_clause)
     return complete_query, (query_value,)
+
+
+# Centralized error handling utilities
+def get_logger(name: str) -> logging.Logger:
+    """Get a configured logger instance for consistent logging across services"""
+    logger = logging.getLogger(name)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+    return logger
+
+
+def handle_service_error(logger: logging.Logger, operation: str, error: Exception,
+                        return_value: Any = None, raise_error: bool = False) -> Any:
+    """
+    Centralized service error handling with consistent logging and response patterns.
+
+    Args:
+        logger: Logger instance for the service
+        operation: Description of the operation that failed
+        error: The exception that occurred
+        return_value: Value to return on error (default: None)
+        raise_error: Whether to re-raise the exception (default: False)
+
+    Returns:
+        return_value if raise_error is False, otherwise raises the exception
+    """
+    error_msg = f"{operation} failed: {str(error)}"
+    logger.error(error_msg, exc_info=True)
+
+    if raise_error:
+        raise error
+
+    return return_value
+
+
+def handle_database_error(logger: logging.Logger, operation: str, error: Exception,
+                         return_empty: bool = True) -> Any:
+    """
+    Specialized database error handling with appropriate return values.
+
+    Args:
+        logger: Logger instance for the service
+        operation: Description of the database operation that failed
+        error: The exception that occurred
+        return_empty: Whether to return empty list/dict (True) or None (False)
+
+    Returns:
+        Empty list, empty dict, or None based on return_empty parameter
+    """
+    error_msg = f"Database {operation} failed: {str(error)}"
+    logger.error(error_msg, exc_info=True)
+
+    if return_empty:
+        # Return appropriate empty container based on common patterns
+        return []
+    else:
+        return None
+
+
+def handle_cache_error(logger: logging.Logger, operation: str, error: Exception) -> bool:
+    """
+    Specialized cache error handling that logs but doesn't fail the operation.
+
+    Args:
+        logger: Logger instance for the service
+        operation: Description of the cache operation that failed
+        error: The exception that occurred
+
+    Returns:
+        False to indicate cache operation failed
+    """
+    error_msg = f"Cache {operation} failed: {str(error)}"
+    logger.warning(error_msg)  # Cache failures are warnings, not errors
+    return False
+
+
+def create_service_logger(service_name: str) -> logging.Logger:
+    """
+    Create a logger specifically configured for service classes.
+
+    Args:
+        service_name: Name of the service (e.g., 'StudentService', 'QuestionService')
+
+    Returns:
+        Configured logger instance
+    """
+    return get_logger(f"services.{service_name.lower()}")

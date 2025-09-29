@@ -15,6 +15,7 @@ import hashlib
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from psycopg2.extras import RealDictCursor
+from data.models import create_service_logger, handle_cache_error
 
 
 class CacheService:
@@ -23,6 +24,7 @@ class CacheService:
     def __init__(self, redis_client, db_manager):
         self.redis = redis_client
         self.db_manager = db_manager
+        self.logger = create_service_logger('CacheService')
         self.cache_stats = {
             'hits': 0,
             'misses': 0,
@@ -42,7 +44,7 @@ class CacheService:
             self.cache_stats['misses'] += 1
             return None
         except Exception as e:
-            print(f"Error getting cached recommendations: {e}")
+            handle_cache_error(self.logger, f"get_cached_recommendations for {student_id}/{objective}", e)
             return None
 
     def cache_recommendations(self, student_id: str, objective: str, recommendations: Any, ttl: int = 1800) -> bool:
@@ -78,8 +80,7 @@ class CacheService:
             self.cache_stats['sets'] += 1
             return True
         except Exception as e:
-            print(f"Error caching recommendations: {e}")
-            return False
+            return handle_cache_error(self.logger, f"cache_recommendations for {student_id}/{objective}", e)
 
     def get_cached_student_history(self, student_id: str) -> Optional[List[Dict[str, Any]]]:
         """Get cached student history"""
