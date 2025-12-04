@@ -141,6 +141,78 @@ def inspect_combined_questions():
                 print("❌ No OpenAI embedding data found")
             print()
 
+        # Analyze images column if it exists
+        if 'images' in df.columns:
+            print("🖼️  IMAGES COLUMN ANALYSIS:")
+            print("-" * 40)
+
+            # Count questions with images vs without
+            def has_images(val):
+                if val is None:
+                    return False
+                if isinstance(val, (list, np.ndarray)):
+                    return len(val) > 0
+                if isinstance(val, str):
+                    return val.strip() != '' and val.strip() != '[]'
+                return bool(val)
+
+            def count_images(val):
+                if val is None:
+                    return 0
+                if isinstance(val, (list, np.ndarray)):
+                    return len(val)
+                if isinstance(val, str):
+                    # Try to parse as list
+                    try:
+                        import ast
+                        parsed = ast.literal_eval(val)
+                        if isinstance(parsed, list):
+                            return len(parsed)
+                    except (ValueError, SyntaxError):
+                        pass
+                    return 1 if val.strip() and val.strip() != '[]' else 0
+                return 1 if val else 0
+
+            df['_has_images'] = df['images'].apply(has_images)
+            df['_image_count'] = df['images'].apply(count_images)
+
+            questions_with_images = df['_has_images'].sum()
+            questions_without_images = len(df) - questions_with_images
+            total_images = df['_image_count'].sum()
+
+            print(f"📊 Questions with images: {questions_with_images} ({questions_with_images/len(df)*100:.1f}%)")
+            print(f"📊 Questions without images: {questions_without_images} ({questions_without_images/len(df)*100:.1f}%)")
+            print(f"📊 Total images referenced: {int(total_images)}")
+
+            if questions_with_images > 0:
+                avg_images = total_images / questions_with_images
+                print(f"📊 Average images per question (with images): {avg_images:.2f}")
+
+                # Distribution of image counts
+                image_count_dist = df[df['_has_images']]['_image_count'].value_counts().sort_index()
+                print(f"\n📈 Image count distribution:")
+                for img_count, count in image_count_dist.items():
+                    print(f"   {int(img_count)} image(s): {count} questions")
+
+                # Show sample image data
+                print(f"\n🔍 Sample image data (first 3 questions with images):")
+                sample_with_images = df[df['_has_images']].head(3)
+                for idx, row in sample_with_images.iterrows():
+                    paper = row['paper_number']
+                    q_num = row['question_number']
+                    images = row['images']
+                    if isinstance(images, (list, np.ndarray)):
+                        img_preview = images[:3] if len(images) > 3 else images
+                        more = f"... (+{len(images)-3} more)" if len(images) > 3 else ""
+                    else:
+                        img_preview = str(images)[:100]
+                        more = "..." if len(str(images)) > 100 else ""
+                    print(f"   {paper} Q{q_num}: {img_preview}{more}")
+
+            # Clean up temporary columns
+            df.drop(columns=['_has_images', '_image_count'], inplace=True)
+            print()
+
         # Group by paper_number to count questions per paper
         question_counts = df.groupby('paper_number')['question_number'].agg(['count', 'min', 'max', 'nunique']).reset_index()
         question_counts.columns = ['paper_number', 'total_questions', 'min_question', 'max_question', 'unique_questions']
